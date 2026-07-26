@@ -1335,6 +1335,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "typst",
+ "typst-layout",
  "typst-pdf",
 ]
 

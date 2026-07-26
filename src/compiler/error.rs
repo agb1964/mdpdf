@@ -2,6 +2,7 @@
 
 use thiserror::Error;
 
+use crate::ast::SourceSpan;
 use crate::compiler::diagnostics::Diagnostic;
 
 /// Ошибка компиляции Typst → PDF.
@@ -14,18 +15,25 @@ pub enum CompileError {
         diagnostics: Vec<Diagnostic>,
     },
 
-    /// Запрошен файл, не зарегистрированный в виртуальной ФС (ТЗ §33).
-    #[error("access to {path} is not allowed")]
+    /// Запрошен файл, не зарегистрированный в виртуальной ФС, или нарушена
+    /// политика доступа к каталогу документа (ТЗ §33).
+    #[error("access to {path} is not allowed: {message}")]
     ResourceAccess {
         /// Запрошенный путь.
         path: String,
+        /// Диапазон в исходном Markdown, если он известен.
+        span: Option<SourceSpan>,
+        /// Описание нарушения.
+        message: String,
     },
 
     /// Изображение не удалось прочитать или его формат не поддерживается (ТЗ §33.3).
     #[error("image {path} could not be loaded: {message}")]
     Image {
-        /// Логический путь изображения.
+        /// Путь изображения в исходном виде.
         path: String,
+        /// Диапазон в исходном Markdown, если он известен.
+        span: Option<SourceSpan>,
         /// Описание проблемы.
         message: String,
     },
@@ -57,4 +65,18 @@ pub enum CompileError {
         /// Описание инварианта.
         message: String,
     },
+}
+
+impl CompileError {
+    /// Диапазон в исходном Markdown, если ошибку удалось к нему привязать.
+    ///
+    /// Позволяет показать `input.md:18:1: ...` вместо позиции в сгенерированном
+    /// Typst (ТЗ §37).
+    #[must_use]
+    pub const fn markdown_span(&self) -> Option<SourceSpan> {
+        match self {
+            Self::ResourceAccess { span, .. } | Self::Image { span, .. } => *span,
+            _ => None,
+        }
+    }
 }

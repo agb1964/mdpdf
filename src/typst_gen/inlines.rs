@@ -69,15 +69,34 @@ fn single_inline(
                     message: error.to_string(),
                 }
             })?;
+            // Alt — это описание, а не подпись: Typst принимает его строкой,
+            // и изображение остаётся inline-элементом, как в Markdown.
             let alt = if image.value.alt.is_empty() {
                 "none".to_owned()
             } else {
-                inline_expression(&image.value.alt, resources)?
+                string_literal(&plain_text(&image.value.alt))
             };
             format!("mdpdf-image(path: {path}, alt: {alt})")
         }
     };
     Ok(expression)
+}
+
+/// Плоский текст inline-последовательности: только содержимое, без разметки.
+fn plain_text(inlines: &[Inline]) -> String {
+    let mut text = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Text(value) | Inline::Code(value) => text.push_str(value),
+            Inline::SoftBreak | Inline::HardBreak => text.push(' '),
+            Inline::Emphasis(children)
+            | Inline::Strong(children)
+            | Inline::Strikethrough(children) => text.push_str(&plain_text(children)),
+            Inline::Link(link) => text.push_str(&plain_text(&link.value.content)),
+            Inline::Image(image) => text.push_str(&plain_text(&image.value.alt)),
+        }
+    }
+    text
 }
 
 /// Присваивает изображению виртуальный путь и запоминает соответствие (ТЗ §24.6).

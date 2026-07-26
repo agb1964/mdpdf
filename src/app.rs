@@ -11,6 +11,8 @@ use std::path::Path;
 use crate::ast::document::Document;
 use crate::ast::metadata::DocumentMetadata;
 use crate::cli::Cli;
+use crate::compiler::error::CompileError;
+use crate::compiler::{CompileInput, EmbeddedTypstCompiler};
 use crate::config::AppConfig;
 use crate::error::{AppError, ExitStatus};
 use crate::markdown::parser::MarkdownParser;
@@ -73,9 +75,55 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
         return Ok(ExitStatus::Success);
     }
 
-    // Milestone 3: compiler::EmbeddedTypstCompiler::compile.
+    let compiled = EmbeddedTypstCompiler::new()
+        .compile_document(CompileInput {
+            typst_source: &generated.source,
+            source_name: &document.name,
+            base_dir: &config.base_dir(),
+            resources: &generated.resources,
+        })
+        .map_err(|error| {
+            // Диагностики Typst показываются пользователю построчно (ТЗ §37),
+            // а не прячутся за общим «PDF compilation failed».
+            if let CompileError::Typst { diagnostics } = &error {
+                for diagnostic in diagnostics {
+                    eprintln!("{}", diagnostic.render());
+                }
+            }
+            // Если ошибку удалось привязать к месту в Markdown, показывается
+            // именно оно, а не позиция в сгенерированном Typst (ТЗ §37).
+            match error.markdown_span() {
+                Some(span) => {
+                    let (line, column) = span.line_column(&document.text);
+                    AppError::CompileAt {
+                        location: format!("{}:{line}:{column}", document.name),
+                        source: Box::new(error),
+                    }
+                }
+                None => AppError::Compile(Box::new(error)),
+            }
+        })?;
+
+    // Предупреждения Typst не теряются и уходят в stderr; PDF всё равно
+    // создаётся (ТЗ §38).
+    for warning in &compiled.warnings {
+        eprintln!("{}", warning.render());
+    }
+
+    if config.check {
+        if !config.quiet {
+            println!("Checked {}", document.name);
+        }
+        return Ok(ExitStatus::Success);
+    }
+
+    if config.verbose {
+        eprintln!("mdpdf: produced {} bytes of PDF", compiled.bytes.len());
+    }
+
+    // Milestone 4: атомарная запись результата (ТЗ §6.4).
     Err(AppError::NotImplemented {
-        feature: "Typst compilation (Milestone 3)",
+        feature: "atomic PDF write (Milestone 4)",
     })
 }
 

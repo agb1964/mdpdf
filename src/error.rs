@@ -108,8 +108,22 @@ pub enum AppError {
     TypstGeneration(#[from] TypstGenerationError),
 
     /// Ошибка этапа 3 — компиляция Typst в PDF.
+    ///
+    /// В боксе: вариант заметно крупнее остальных, а `AppError` возвращается
+    /// из каждой функции конвейера.
     #[error(transparent)]
-    Compile(#[from] CompileError),
+    Compile(Box<CompileError>),
+
+    /// Та же ошибка, но привязанная к позиции в Markdown (ТЗ §37):
+    /// `input.md:18:1: image "images/schema.png" could not be loaded`.
+    #[error("{location}: {source}")]
+    CompileAt {
+        /// Префикс `файл:строка:столбец`.
+        location: String,
+        /// Исходная ошибка.
+        #[source]
+        source: Box<CompileError>,
+    },
 
     /// Ошибка записи результата.
     #[error("cannot write {path}")]
@@ -144,6 +158,12 @@ pub enum AppError {
     },
 }
 
+impl From<CompileError> for AppError {
+    fn from(error: CompileError) -> Self {
+        Self::Compile(Box::new(error))
+    }
+}
+
 impl AppError {
     /// Код завершения, соответствующий ошибке (ТЗ §43).
     #[must_use]
@@ -154,7 +174,11 @@ impl AppError {
             Self::Markdown(_) | Self::MarkdownAt { .. } => ExitStatus::MarkdownError,
             Self::AstValidation(_) => ExitStatus::AstValidationError,
             Self::TypstGeneration(_) => ExitStatus::TypstGenerationError,
-            Self::Compile(_) => ExitStatus::CompileError,
+            // Нарушение политики доступа к ресурсу имеет собственный код (ТЗ §43).
+            Self::Compile(error) | Self::CompileAt { source: error, .. } => match **error {
+                CompileError::ResourceAccess { .. } => ExitStatus::ResourcePolicyError,
+                _ => ExitStatus::CompileError,
+            },
             Self::Output { .. } | Self::OutputExists { .. } => ExitStatus::OutputError,
             Self::ResourcePolicy { .. } => ExitStatus::ResourcePolicyError,
             Self::NotImplemented { .. } => ExitStatus::GeneralError,
