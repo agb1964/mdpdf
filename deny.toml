@@ -1,0 +1,52 @@
+# Конфигурация cargo-deny (ТЗ §51, §52, §55).
+
+[graph]
+all-features = true
+
+[advisories]
+version = 2
+yanked = "deny"
+# Все записи ниже приходят из дерева typst, закреплённого `=0.15.1` (ТЗ §36),
+# поэтому обновлением зависимостей не устраняются. Список пересматривается
+# при каждом подъёме версии typst: снять ignore, прогнать `cargo deny check
+# advisories` и оставить только то, что всё ещё не исправлено.
+ignore = [
+    # unmaintained, безопасной версии не существует
+    { id = "RUSTSEC-2025-0141", reason = "bincode 1.3.3: syntect → two-face → typst-library" },
+    { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15: biblatex/hayagriva → typst-library" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz 0.20.1: krilla, usvg, typst-layout; замена harfrust ещё не принята upstream" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1: fontdb, rustybuzz, typst-*; замена skrifa ещё не принята upstream" },
+    { id = "RUSTSEC-2024-0320", reason = "yaml-rust 0.4.5: syntect → two-face → typst-library" },
+    # vulnerability: фикс есть в quick-xml >= 0.41, но citationberg 0.7.0 требует ровно 0.38.1
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38.4: citationberg → hayagriva → typst-library" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml 0.38.4: та же цепочка, что и RUSTSEC-2026-0194" },
+]
+
+[licenses]
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Zlib",
+    "Unicode-3.0",
+    "CC0-1.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Дубли целиком внутри дерева typst. `syn` намеренно не скрыт: его вторая версия
+# приходит от наших прямых зависимостей и исчезнет при их обновлении.
+skip = [
+    { name = "quick-xml", version = "=0.38.4" },
+    { name = "roxmltree", version = "=0.20.0" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

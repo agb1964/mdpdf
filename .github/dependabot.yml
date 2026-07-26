@@ -1,0 +1,22 @@
+# Обновление зависимостей отдельными PR.
+#
+# `typst` и `typst-pdf` игнорируются намеренно: по ТЗ §36 их версии закреплены
+# точно и обновляются отдельным PR с changelog review, адаптацией compiler,
+# полным test suite и сравнением golden PDF.
+
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: typst
+      - dependency-name: typst-pdf
+      - dependency-name: pulldown-cmark
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
