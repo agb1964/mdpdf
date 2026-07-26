@@ -228,8 +228,13 @@ const fn validate_span(span: SourceSpan) -> Result<(), AstValidationError> {
 #[must_use]
 pub fn is_network_source(source: &str) -> bool {
     let trimmed = source.trim();
-    ["http://", "https://", "data:"].iter().any(|scheme| {
-        trimmed.len() >= scheme.len() && trimmed[..scheme.len()].eq_ignore_ascii_case(scheme)
+    // Срез только через `get`: `trimmed[..n]` режет UTF-8 не на границе символа
+    // и паникует на адресе вроде `dat€:x`, а паник быть не должно (ТЗ §17).
+    // `//host/x.png` — protocol-relative адрес, такой же сетевой (ТЗ §10.12).
+    ["http://", "https://", "data:", "//"].iter().any(|scheme| {
+        trimmed
+            .get(..scheme.len())
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case(scheme))
     })
 }
 
@@ -358,6 +363,26 @@ mod tests {
         assert!(is_network_source("http://a/b.png"));
         assert!(is_network_source("  https://a/b.png"));
         assert!(is_network_source("data:image/png;base64,AAAA"));
+        // Protocol-relative адрес — тоже сетевой (ТЗ §10.12).
+        assert!(is_network_source("//cdn.example.com/a.png"));
+    }
+
+    #[test]
+    fn multibyte_sources_do_not_panic() {
+        // Регрессия: срез `source[..scheme.len()]` попадал внутрь символа
+        // и ронял программу на пользовательском вводе.
+        for source in [
+            "dat€:x",
+            "€",
+            "ht€p://a",
+            "http€",
+            "日本語.png",
+            "d",
+            "",
+            "//€",
+        ] {
+            let _ = is_network_source(source);
+        }
     }
 
     #[test]
