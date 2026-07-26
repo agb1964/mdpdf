@@ -146,7 +146,13 @@ pub fn path_literal(value: &str) -> Result<String, EscapeError> {
 }
 
 /// Ограничение длины URL (ТЗ §40).
-const MAX_URL_BYTES: usize = 16 * 1024;
+///
+/// `pub(crate)`, потому что то же значение переиспользуется в
+/// `compiler::limits` (единый источник истины, чтобы лимиты не разъезжались
+/// при правке одной из констант). `typst_gen` ничего не импортирует из
+/// `compiler`, так что зависимость идёт в разрешённую сторону: `compiler` →
+/// `typst_gen`.
+pub(crate) const MAX_URL_BYTES: usize = 16 * 1024;
 
 /// Управляющие и невидимые форматирующие символы.
 fn is_control_like(ch: char) -> bool {

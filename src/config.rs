@@ -5,7 +5,7 @@
 
 use std::path::PathBuf;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, PaperArg};
 use crate::error::AppError;
 use crate::output;
 use crate::typst_gen::generator::{Length, RenderOptions};
@@ -54,6 +54,17 @@ pub struct AppConfig {
     pub verbose: bool,
 }
 
+/// Строковое представление размера страницы для [`PaperSize::from_str`].
+///
+/// Явный `match` вместо `format!("{:?}", ..)` не зависит от имени варианта
+/// enum `Debug`-представления и не ломается при его переименовании.
+fn paper_arg_to_str(paper: PaperArg) -> &'static str {
+    match paper {
+        PaperArg::A4 => "a4",
+        PaperArg::Letter => "letter",
+    }
+}
+
 impl AppConfig {
     /// Собирает конфигурацию из аргументов CLI.
     ///
@@ -92,7 +103,7 @@ impl AppConfig {
             output,
             title: args.title,
             author: args.author,
-            paper: format!("{:?}", args.paper).to_lowercase(),
+            paper: paper_arg_to_str(args.paper).to_owned(),
             margin: args.margin,
             font_size: args.font_size,
             toc: args.toc,
