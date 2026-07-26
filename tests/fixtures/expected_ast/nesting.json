@@ -1,0 +1,259 @@
+{
+  "metadata": {
+    "title": null,
+    "author": null,
+    "language": null
+  },
+  "blocks": [
+    {
+      "value": {
+        "List": {
+          "kind": "Unordered",
+          "items": [
+            {
+              "checked": null,
+              "blocks": [
+                {
+                  "value": {
+                    "Paragraph": {
+                      "content": [
+                        {
+                          "Text": "внешний пункт"
+                        }
+                      ]
+                    }
+                  },
+                  "span": {
+                    "start": 2,
+                    "end": 27
+                  }
+                },
+                {
+                  "value": {
+                    "List": {
+                      "kind": "Unordered",
+                      "items": [
+                        {
+                          "checked": null,
+                          "blocks": [
+                            {
+                              "value": {
+                                "Paragraph": {
+                                  "content": [
+                                    {
+                                      "Text": "вложенный пункт"
+                                    }
+                                  ]
+                                }
+                              },
+                              "span": {
+                                "start": 32,
+                                "end": 61
+                              }
+                            },
+                            {
+                              "value": {
+                                "List": {
+                                  "kind": {
+                                    "Ordered": {
+                                      "start": 1
+                                    }
+                                  },
+                                  "items": [
+                                    {
+                                      "checked": null,
+                                      "blocks": [
+                                        {
+                                          "value": {
+                                            "Paragraph": {
+                                              "content": [
+                                                {
+                                                  "Text": "нумерованный"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "span": {
+                                            "start": 69,
+                                            "end": 93
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "checked": null,
+                                      "blocks": [
+                                        {
+                                          "value": {
+                                            "Paragraph": {
+                                              "content": [
+                                                {
+                                                  "Text": "второй"
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "span": {
+                                            "start": 101,
+                                            "end": 113
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              "span": {
+                                "start": 66,
+                                "end": 114
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "span": {
+                    "start": 30,
+                    "end": 114
+                  }
+                }
+              ]
+            },
+            {
+              "checked": true,
+              "blocks": [
+                {
+                  "value": {
+                    "Paragraph": {
+                      "content": [
+                        {
+                          "Text": "задача выполнена"
+                        }
+                      ]
+                    }
+                  },
+                  "span": {
+                    "start": 120,
+                    "end": 151
+                  }
+                }
+              ]
+            },
+            {
+              "checked": false,
+              "blocks": [
+                {
+                  "value": {
+                    "Paragraph": {
+                      "content": [
+                        {
+                          "Text": "задача не выполнена"
+                        }
+                      ]
+                    }
+                  },
+                  "span": {
+                    "start": 158,
+                    "end": 194
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 0,
+        "end": 196
+      }
+    },
+    {
+      "value": {
+        "Quote": {
+          "blocks": [
+            {
+              "value": {
+                "Paragraph": {
+                  "content": [
+                    {
+                      "Text": "цитата"
+                    }
+                  ]
+                }
+              },
+              "span": {
+                "start": 198,
+                "end": 211
+              }
+            },
+            {
+              "value": {
+                "Quote": {
+                  "blocks": [
+                    {
+                      "value": {
+                        "Paragraph": {
+                          "content": [
+                            {
+                              "Text": "вложенная цитата"
+                            }
+                          ]
+                        }
+                      },
+                      "span": {
+                        "start": 217,
+                        "end": 249
+                      }
+                    },
+                    {
+                      "value": {
+                        "List": {
+                          "kind": "Unordered",
+                          "items": [
+                            {
+                              "checked": null,
+                              "blocks": [
+                                {
+                                  "value": {
+                                    "Paragraph": {
+                                      "content": [
+                                        {
+                                          "Text": "список внутри цитаты"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "span": {
+                                    "start": 259,
+                                    "end": 297
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "span": {
+                        "start": 257,
+                        "end": 298
+                      }
+                    }
+                  ]
+                }
+              },
+              "span": {
+                "start": 215,
+                "end": 298
+              }
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 196,
+        "end": 298
+      }
+    }
+  ]
+}

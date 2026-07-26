@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "title": null,
+    "author": null,
+    "language": null
+  },
+  "blocks": [
+    {
+      "value": {
+        "Heading": {
+          "level": "H1",
+          "content": [
+            {
+              "Text": "Ёжик, ёлка и «кавычки» — тире"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 61,
+        "end": 117
+      }
+    },
+    {
+      "value": {
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "Строка с мягким переносом"
+            },
+            "SoftBreak",
+            {
+              "Text": "и продолжением, а также с жёстким переносом"
+            },
+            "HardBreak",
+            {
+              "Text": "после двух пробелов."
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 118,
+        "end": 286
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": null,
+          "code": "отступной блок кода"
+        }
+      },
+      "span": {
+        "start": 291,
+        "end": 328
+      }
+    }
+  ]
+}

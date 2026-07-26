@@ -6,7 +6,7 @@ SAMPLE ?= /tmp/mdpdf-sample.md
 
 .DEFAULT_GOAL := help
 .PHONY: help ci fmt fmt-check check clippy test doc deny build release run size \
-        coverage fuzz tools clean sample
+        coverage fuzz tools clean sample golden-update
 
 help: ## Показать список целей
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -56,6 +56,9 @@ size: release ## Размер release-бинарника (ТЗ §56)
 	@ls -l $(BIN) | awk '{printf "release binary: %s bytes (%.1f MiB)\n", $$5, $$5/1048576}'
 
 ## --- Дополнительные проверки -------------------------------------------------
+
+golden-update: ## Перезаписать эталонные AST-файлы (ТЗ §46)
+	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test markdown_parser
 
 coverage: ## Покрытие тестами (ТЗ §17, §29: цель — 90%)
 	$(CARGO) llvm-cov --all-features --workspace --summary-only
