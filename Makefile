@@ -60,8 +60,8 @@ size: release ## Размер release-бинарника (ТЗ §56)
 golden-update: ## Перезаписать эталонные AST-файлы (ТЗ §46)
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test markdown_parser
 
-coverage: ## Покрытие тестами (ТЗ §17, §29: цель — 90%)
-	$(CARGO) llvm-cov --all-features --workspace --summary-only
+coverage: ## Покрытие тестами, падает ниже 90% (ТЗ §17, §29)
+	$(CARGO) llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
 
 fuzz: ## Fuzzing (ТЗ §50, требует nightly и cargo-fuzz)
 	@echo "fuzz targets появятся на Milestone 5 (ТЗ §50)"

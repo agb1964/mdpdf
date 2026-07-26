@@ -63,8 +63,11 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
+      # Порог ТЗ (§17, §29) — 90% строк для markdown, ast и typst_gen.
+      # cargo-llvm-cov умеет ронять сборку только по общему проценту, поэтому
+      # gate стоит на нём, а помодульные цифры видны в выводе выше.
       - name: Coverage
-        run: cargo llvm-cov --all-features --workspace --summary-only
+        run: cargo llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
 
   binary-size:
     name: release binary size
