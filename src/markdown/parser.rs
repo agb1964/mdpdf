@@ -7,6 +7,7 @@ use pulldown_cmark::{Options, Parser};
 
 use crate::ast::block::Block;
 use crate::ast::document::Document;
+use crate::ast::inline::Inline;
 use crate::ast::metadata::DocumentMetadata;
 use crate::ast::validate::validate_document;
 use crate::ast::{SourceSpan, Spanned};
@@ -117,6 +118,12 @@ impl Default for MarkdownParser {
 ///
 /// Живёт здесь, а не в `validate_document`: сигнатура валидатора закреплена
 /// в ТЗ и длину исходного текста не принимает.
+///
+/// Обходит дерево целиком, а не только блочные контейнеры: ссылки и
+/// изображения несут собственный `Spanned` внутри inline-содержимого
+/// (заголовков, абзацев, ячеек таблиц), и их диапазоны точно так же могут
+/// выйти за пределы источника, если `pulldown-cmark` когда-нибудь вернёт
+/// диапазон, не совпадающий с длиной документа.
 fn check_spans_within_source(
     blocks: &[Spanned<Block>],
     source_len: usize,
@@ -131,13 +138,61 @@ fn check_spans_within_source(
             });
         }
         match &block.value {
+            Block::Heading(heading) => check_inline_spans(&heading.content, source_len)?,
+            Block::Paragraph(paragraph) => check_inline_spans(&paragraph.content, source_len)?,
             Block::Quote(quote) => check_spans_within_source(&quote.blocks, source_len)?,
             Block::List(list) => {
                 for item in &list.items {
                     check_spans_within_source(&item.blocks, source_len)?;
                 }
             }
-            _ => {}
+            Block::Table(table) => {
+                for cell in table
+                    .header
+                    .cells
+                    .iter()
+                    .chain(table.rows.iter().flat_map(|row| row.cells.iter()))
+                {
+                    check_inline_spans(&cell.content, source_len)?;
+                }
+            }
+            Block::CodeBlock(_) | Block::ThematicBreak => {}
+        }
+    }
+    Ok(())
+}
+
+/// Проверяет диапазоны ссылок и изображений внутри inline-содержимого,
+/// рекурсивно спускаясь в форматирование и вложенный alt-текст (ТЗ §14).
+fn check_inline_spans(inlines: &[Inline], source_len: usize) -> Result<(), MarkdownError> {
+    for inline in inlines {
+        match inline {
+            Inline::Link(link) => {
+                if link.span.end > source_len {
+                    return Err(MarkdownError::InternalInvariant {
+                        message: format!(
+                            "span {}..{} exceeds source length {source_len}",
+                            link.span.start, link.span.end
+                        ),
+                    });
+                }
+                check_inline_spans(&link.value.content, source_len)?;
+            }
+            Inline::Image(image) => {
+                if image.span.end > source_len {
+                    return Err(MarkdownError::InternalInvariant {
+                        message: format!(
+                            "span {}..{} exceeds source length {source_len}",
+                            image.span.start, image.span.end
+                        ),
+                    });
+                }
+                check_inline_spans(&image.value.alt, source_len)?;
+            }
+            Inline::Emphasis(content)
+            | Inline::Strong(content)
+            | Inline::Strikethrough(content) => check_inline_spans(content, source_len)?,
+            Inline::Text(_) | Inline::Code(_) | Inline::SoftBreak | Inline::HardBreak => {}
         }
     }
     Ok(())
@@ -167,5 +222,136 @@ mod tests {
         assert!(!options.contains(Options::ENABLE_DEFINITION_LIST));
         assert!(!options.contains(Options::ENABLE_WIKILINKS));
         assert!(!options.contains(Options::ENABLE_GFM));
+    }
+
+    // Кадры builder-а всегда строят span из реального диапазона pulldown-cmark,
+    // поэтому конструируем AST напрямую — это единственный способ подать сюда
+    // span, выходящий за пределы источника, и проверить, что обход его находит
+    // на любой глубине, а не только в блочных контейнерах (ТЗ §14).
+
+    fn out_of_range_link() -> Inline {
+        use crate::ast::inline::Link;
+
+        Inline::Link(Spanned::new(
+            Link {
+                destination: "x".to_owned(),
+                title: None,
+                content: Vec::new(),
+            },
+            SourceSpan::new(0, 999),
+        ))
+    }
+
+    #[test]
+    fn link_span_inside_a_paragraph_is_checked() {
+        use crate::ast::block::Paragraph;
+
+        let blocks = vec![Spanned::new(
+            Block::Paragraph(Paragraph {
+                content: vec![out_of_range_link()],
+            }),
+            SourceSpan::new(0, 3),
+        )];
+        let err = check_spans_within_source(&blocks, 3).expect_err("span exceeds source");
+        assert!(matches!(err, MarkdownError::InternalInvariant { .. }));
+    }
+
+    #[test]
+    fn link_span_inside_a_heading_is_checked() {
+        use crate::ast::block::Heading;
+        use crate::ast::block::HeadingLevel;
+
+        let blocks = vec![Spanned::new(
+            Block::Heading(Heading {
+                level: HeadingLevel::H1,
+                content: vec![out_of_range_link()],
+                id: None,
+            }),
+            SourceSpan::new(0, 3),
+        )];
+        let err = check_spans_within_source(&blocks, 3).expect_err("span exceeds source");
+        assert!(matches!(err, MarkdownError::InternalInvariant { .. }));
+    }
+
+    #[test]
+    fn image_span_nested_in_emphasis_inside_a_table_cell_is_checked() {
+        use crate::ast::block::{Alignment, Table, TableCell, TableRow};
+        use crate::ast::inline::Image;
+
+        let image = Inline::Image(Spanned::new(
+            Image {
+                source: "a.png".to_owned(),
+                title: None,
+                alt: Vec::new(),
+            },
+            SourceSpan::new(0, 999),
+        ));
+        let cell = TableCell {
+            content: vec![Inline::Emphasis(vec![image])],
+        };
+        let blocks = vec![Spanned::new(
+            Block::Table(Table {
+                alignments: vec![Alignment::None],
+                header: TableRow { cells: vec![] },
+                rows: vec![TableRow { cells: vec![cell] }],
+            }),
+            SourceSpan::new(0, 3),
+        )];
+        let err = check_spans_within_source(&blocks, 3).expect_err("span exceeds source");
+        assert!(matches!(err, MarkdownError::InternalInvariant { .. }));
+    }
+
+    #[test]
+    fn spans_within_bounds_are_accepted_everywhere() {
+        use crate::ast::block::{
+            Alignment, Heading, HeadingLevel, Paragraph, Table, TableCell, TableRow,
+        };
+        use crate::ast::inline::{Image, Link};
+
+        let link = Inline::Link(Spanned::new(
+            Link {
+                destination: "x".to_owned(),
+                title: None,
+                content: Vec::new(),
+            },
+            SourceSpan::new(0, 3),
+        ));
+        let image = Inline::Image(Spanned::new(
+            Image {
+                source: "a.png".to_owned(),
+                title: None,
+                alt: Vec::new(),
+            },
+            SourceSpan::new(0, 3),
+        ));
+        let blocks = vec![
+            Spanned::new(
+                Block::Heading(Heading {
+                    level: HeadingLevel::H1,
+                    content: vec![link],
+                    id: None,
+                }),
+                SourceSpan::new(0, 3),
+            ),
+            Spanned::new(
+                Block::Paragraph(Paragraph {
+                    content: vec![Inline::Strong(vec![image])],
+                }),
+                SourceSpan::new(0, 3),
+            ),
+            Spanned::new(
+                Block::Table(Table {
+                    alignments: vec![Alignment::None],
+                    header: TableRow {
+                        cells: vec![TableCell {
+                            content: vec![Inline::Text("a".to_owned())],
+                        }],
+                    },
+                    rows: vec![],
+                }),
+                SourceSpan::new(0, 3),
+            ),
+        ];
+        assert!(check_spans_within_source(&blocks, 3).is_ok());
     }
 }
