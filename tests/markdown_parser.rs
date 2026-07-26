@@ -335,6 +335,61 @@ fn footnotes_stay_plain_text_since_the_extension_is_off() {
     );
 }
 
+// --- лимиты структуры (ТЗ §40) ------------------------------------------------
+
+mod limits {
+    use mdpdf::ast::limits::MAX_NESTING_DEPTH;
+    use mdpdf::markdown::error::MarkdownError;
+    use mdpdf::markdown::parser::MarkdownParser;
+
+    fn parse(source: &str) -> Result<mdpdf::ast::document::Document, MarkdownError> {
+        MarkdownParser::default().parse(source)
+    }
+
+    /// Без лимита такой документ роняет процесс переполнением стека при обходе
+    /// готового AST — то есть аварийным завершением, а не ошибкой.
+    #[test]
+    fn deeply_nested_quotes_produce_an_error_instead_of_a_crash() {
+        let source = format!("{} глубоко\n", ">".repeat(5_000));
+        let err = parse(&source).expect_err("depth must be rejected");
+        assert!(matches!(err, MarkdownError::LimitExceeded { .. }));
+    }
+
+    #[test]
+    fn deeply_nested_emphasis_produces_an_error() {
+        let source = format!("{0}текст{0}\n", "*".repeat(2_000));
+        let err = parse(&source).expect_err("depth must be rejected");
+        assert!(matches!(err, MarkdownError::LimitExceeded { .. }));
+    }
+
+    #[test]
+    fn deeply_nested_lists_produce_an_error() {
+        let source: String = (0..500)
+            .map(|level| format!("{}- пункт\n", "  ".repeat(level)))
+            .collect();
+        let err = parse(&source).expect_err("depth must be rejected");
+        assert!(matches!(err, MarkdownError::LimitExceeded { .. }));
+    }
+
+    #[test]
+    fn nesting_just_below_the_limit_is_accepted() {
+        // Граница должна пропускать документы, которые в неё укладываются:
+        // каждый уровень цитаты — один кадр, плюс абзац внутри.
+        let source = format!("{} текст\n", ">".repeat(MAX_NESTING_DEPTH - 2));
+        assert!(
+            parse(&source).is_ok(),
+            "document within the limit must parse"
+        );
+    }
+
+    #[test]
+    fn the_error_carries_a_position() {
+        let source = format!("{} глубоко\n", ">".repeat(5_000));
+        let err = parse(&source).expect_err("depth must be rejected");
+        assert!(err.span().is_some(), "limit errors must be locatable");
+    }
+}
+
 // --- golden-тесты AST (ТЗ §46) ------------------------------------------------
 
 mod golden {

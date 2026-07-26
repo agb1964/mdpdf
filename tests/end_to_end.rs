@@ -1,6 +1,6 @@
 //! Сквозные сценарии (ТЗ §48).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use predicates::str::contains;
@@ -299,4 +299,63 @@ fn a_missing_image_stops_the_pipeline_before_writing() {
 
     assert!(!dir.path().join("doc.pdf").exists());
     assert_no_leftovers(dir.path());
+}
+
+// --- изображения SVG (ТЗ §33) --------------------------------------------------
+
+/// Сквозной прогон с настоящим SVG-изображением (не только PNG, как в
+/// остальных сценариях выше) — раздел 6 code-analysis-2026-07-26.md.
+#[test]
+fn a_document_with_a_real_svg_image_compiles() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let images = dir.path().join("images");
+    std::fs::create_dir(&images).expect("create dir");
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/images/dot.svg"),
+        images.join("dot.svg"),
+    )
+    .expect("copy fixture");
+
+    let input = dir.path().join("doc.md");
+    std::fs::write(&input, "# Заголовок\n\n![точка](images/dot.svg)\n").expect("write fixture");
+
+    mdpdf().arg(&input).assert().success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+// --- предупреждения Typst (ТЗ §38) ---------------------------------------------
+
+/// SVG с `<foreignObject>` — Typst не отказывается его встраивать, но
+/// предупреждает, что элемент может отрисоваться неверно
+/// (`typst-library`, `visualize/image/mod.rs`). Предупреждение обязано дойти
+/// до stderr, а PDF всё равно должен быть создан (ТЗ §38); эта ветка
+/// (`CompiledPdf.warnings` непустой) раньше не тестировалась
+/// (раздел 6 code-analysis-2026-07-26.md).
+#[test]
+fn a_typst_warning_reaches_stderr_and_the_pdf_is_still_created() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let images = dir.path().join("images");
+    std::fs::create_dir(&images).expect("create dir");
+    std::fs::copy(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/images/foreign-object.svg"),
+        images.join("foreign-object.svg"),
+    )
+    .expect("copy fixture");
+
+    let input = dir.path().join("doc.md");
+    std::fs::write(
+        &input,
+        "# Заголовок\n\n![картинка](images/foreign-object.svg)\n",
+    )
+    .expect("write fixture");
+
+    mdpdf()
+        .arg(&input)
+        .assert()
+        .success()
+        .stderr(contains("warning"))
+        .stderr(contains("foreign object"));
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
 }

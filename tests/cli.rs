@@ -105,3 +105,158 @@ fn nul_byte_in_input_exits_with_input_error() {
 
     mdpdf().arg(&path).assert().code(3);
 }
+
+// --- сквозные проверки флагов рендеринга (ТЗ §20, §48) -------------------------
+//
+// `help_lists_every_documented_option` выше проверяет только присутствие флага
+// в `--help`; здесь каждый флаг прогоняется через реальный бинарь на маленьком
+// документе, чтобы убедиться, что он действительно доходит до конвейера и не
+// ломает компиляцию (раздел 6 code-analysis-2026-07-26.md).
+
+/// Каталог с готовым `doc.md` внутри.
+fn document(markdown: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let input = dir.path().join("doc.md");
+    std::fs::write(&input, markdown).expect("write fixture");
+    (dir, input)
+}
+
+/// Файл существует и начинается с сигнатуры `%PDF-`.
+fn assert_is_pdf(path: &std::path::Path) {
+    let bytes = std::fs::read(path)
+        .unwrap_or_else(|error| panic!("{} must exist: {error}", path.display()));
+    assert!(
+        bytes.starts_with(b"%PDF-"),
+        "{} is not a PDF",
+        path.display()
+    );
+}
+
+/// Документ с несколькими заголовками разного уровня — нужен для
+/// `--toc` и `--heading-numbers`, где одного заголовка недостаточно, чтобы
+/// увидеть эффект флага.
+const MULTI_HEADING_DOCUMENT: &str = "\
+# Первый заголовок
+
+Текст первого раздела.
+
+## Второй заголовок
+
+Текст второго раздела.
+
+### Третий заголовок
+
+Текст третьего раздела.
+";
+
+#[test]
+fn paper_letter_produces_a_pdf() {
+    let (dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--paper")
+        .arg("letter")
+        .assert()
+        .success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn toc_with_several_headings_produces_a_pdf() {
+    let (dir, input) = document(MULTI_HEADING_DOCUMENT);
+
+    mdpdf().arg(&input).arg("--toc").assert().success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn heading_numbers_with_several_headings_produces_a_pdf() {
+    let (dir, input) = document(MULTI_HEADING_DOCUMENT);
+
+    mdpdf()
+        .arg(&input)
+        .arg("--heading-numbers")
+        .assert()
+        .success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn margin_override_produces_a_pdf() {
+    let (dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--margin")
+        .arg("15mm")
+        .assert()
+        .success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn font_size_override_produces_a_pdf() {
+    let (dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--font-size")
+        .arg("13pt")
+        .assert()
+        .success();
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn verbose_prints_pipeline_diagnostics_to_stderr() {
+    let (dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--verbose")
+        .assert()
+        .success()
+        .stderr(contains("mdpdf:"));
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+// --- невалидные значения длины (ТЗ §20.2, код завершения 6) --------------------
+//
+// Диапазоны проверяются юнит-тестами в `src/typst_gen/generator.rs`, но через
+// бинарь путь «CLI → AppConfig → RenderOptions::validate» раньше не
+// прогонялся (раздел 6 code-analysis-2026-07-26.md).
+
+#[test]
+fn margin_larger_than_half_the_page_exits_with_typst_generation_error() {
+    let (_dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--margin")
+        .arg("300mm")
+        .assert()
+        .code(6)
+        .stderr(contains("margin"))
+        .stderr(contains("exceeds half"));
+}
+
+#[test]
+fn font_size_out_of_range_exits_with_typst_generation_error() {
+    let (_dir, input) = document("# Заголовок\n\nТекст.\n");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--font-size")
+        .arg("3pt")
+        .assert()
+        .code(6)
+        .stderr(contains("font size"))
+        .stderr(contains("outside"));
+}

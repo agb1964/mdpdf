@@ -231,9 +231,68 @@ fn compilation_is_deterministic() {
     let markdown = "# Заголовок\n\nТекст со ссылкой [сюда](a.md).\n";
     let first = compile(markdown);
     let second = compile(markdown);
-    assert_eq!(
-        first.len(),
-        second.len(),
-        "PDF size differs between identical runs"
+    // Побайтовое сравнение, а не только длины (ТЗ §25, раздел 6
+    // code-analysis-2026-07-26.md): совпадающая длина не исключает
+    // недетерминированность содержимого (например, ID объектов PDF).
+    if first != second {
+        let first_len = first.len();
+        let second_len = second.len();
+        let mismatch = first.iter().zip(second.iter()).position(|(a, b)| a != b);
+        match mismatch {
+            Some(index) => {
+                let start = index.saturating_sub(16);
+                let end_first = (index + 16).min(first.len());
+                let end_second = (index + 16).min(second.len());
+                panic!(
+                    "PDF bytes differ between identical runs: first byte mismatch at index {index} \
+                     (first len {first_len}, second len {second_len})\n\
+                     first  around mismatch: {:02x?}\n\
+                     second around mismatch: {:02x?}",
+                    &first[start..end_first],
+                    &second[start..end_second]
+                );
+            }
+            None => panic!(
+                "PDF bytes differ between identical runs only in length: {first_len} vs {second_len}"
+            ),
+        }
+    }
+}
+
+// --- предупреждения (ТЗ §38) ---------------------------------------------------
+
+/// SVG с `<foreignObject>` компилируется, но Typst предупреждает, что такой
+/// элемент может отрисоваться неверно; ветка непустых `CompiledPdf.warnings`
+/// раньше не тестировалась (раздел 6 code-analysis-2026-07-26.md).
+#[test]
+fn svg_with_foreign_object_warns_but_still_compiles() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::create_dir(dir.path().join("images")).expect("create dir");
+    let svg =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/images/foreign-object.svg");
+    std::fs::copy(&svg, dir.path().join("images/foreign-object.svg")).expect("copy fixture");
+
+    let generated = generate("![картинка](images/foreign-object.svg)\n");
+    let compiled = EmbeddedTypstCompiler::new()
+        .compile_document(CompileInput {
+            typst_source: &generated.source,
+            source_name: "doc.md",
+            base_dir: dir.path(),
+            resources: &generated.resources,
+        })
+        .expect("document with a foreign object still compiles");
+
+    assert!(pdf::looks_like_pdf(&compiled.bytes));
+    assert!(
+        !compiled.warnings.is_empty(),
+        "expected a Typst warning about the foreign object"
+    );
+    assert!(
+        compiled
+            .warnings
+            .iter()
+            .any(|warning| warning.render().contains("foreign object")),
+        "warnings did not mention the foreign object: {:?}",
+        compiled.warnings
     );
 }
