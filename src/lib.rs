@@ -58,7 +58,8 @@ pub fn run_cli() -> ExitCode {
     match app::run(args) {
         Ok(status) => ExitCode::from(status.code()),
         Err(err) => {
-            eprintln!("mdpdf: {err}");
+            // Формат сообщения задан ТЗ §16: `input.md:12:5: описание`.
+            eprintln!("{err}");
             if verbose {
                 let mut source = std::error::Error::source(&err);
                 while let Some(cause) = source {

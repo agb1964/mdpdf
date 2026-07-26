@@ -88,6 +88,17 @@ pub enum AppError {
     #[error(transparent)]
     Markdown(#[from] MarkdownError),
 
+    /// Та же ошибка, но с позицией в исходном файле (ТЗ §16):
+    /// `input.md:12:5: unsupported Markdown construct: inline HTML`.
+    #[error("{location}: {source}")]
+    MarkdownAt {
+        /// Префикс `файл:строка:столбец`.
+        location: String,
+        /// Исходная ошибка.
+        #[source]
+        source: MarkdownError,
+    },
+
     /// Ошибка валидации AST.
     #[error(transparent)]
     AstValidation(#[from] AstValidationError),
@@ -140,7 +151,7 @@ impl AppError {
         match self {
             Self::Cli { .. } => ExitStatus::CliError,
             Self::Input { .. } | Self::InvalidInput { .. } => ExitStatus::InputError,
-            Self::Markdown(_) => ExitStatus::MarkdownError,
+            Self::Markdown(_) | Self::MarkdownAt { .. } => ExitStatus::MarkdownError,
             Self::AstValidation(_) => ExitStatus::AstValidationError,
             Self::TypstGeneration(_) => ExitStatus::TypstGenerationError,
             Self::Compile(_) => ExitStatus::CompileError,

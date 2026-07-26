@@ -57,3 +57,19 @@ pub enum MarkdownError {
         message: String,
     },
 }
+
+impl MarkdownError {
+    /// Диапазон исходного Markdown, если ошибка к нему привязана.
+    ///
+    /// Используется для построения префикса `файл:строка:столбец` (ТЗ §16).
+    #[must_use]
+    pub const fn span(&self) -> Option<SourceSpan> {
+        match self {
+            Self::InvalidInput { span, .. } => *span,
+            Self::UnsupportedConstruct { span, .. }
+            | Self::InvalidNesting { span, .. }
+            | Self::IncompleteDocument { span, .. } => Some(*span),
+            Self::AstValidation(_) | Self::InternalInvariant { .. } => None,
+        }
+    }
+}
