@@ -57,9 +57,10 @@ size: release ## Размер release-бинарника (ТЗ §56)
 
 ## --- Дополнительные проверки -------------------------------------------------
 
-golden-update: ## Перезаписать эталонные AST- и Typst-файлы (ТЗ §46)
+golden-update: ## Перезаписать эталонные AST-, Typst- и PDF-файлы (ТЗ §46, §49)
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test markdown_parser
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test typst_generator
+	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test golden_pdf pdf_structure_matches_golden_facts
 
 coverage: ## Покрытие тестами, падает ниже 90% (ТЗ §17, §29)
 	$(CARGO) llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
