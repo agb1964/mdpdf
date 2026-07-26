@@ -198,6 +198,41 @@ fn a_file_that_is_not_an_image_is_refused_before_typst() {
 }
 
 #[test]
+fn a_plain_svg_image_is_embedded() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::create_dir(dir.path().join("images")).expect("create dir");
+    let svg = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/images/dot.svg");
+    std::fs::copy(&svg, dir.path().join("images/dot.svg")).expect("copy fixture");
+
+    let bytes = compile_in("![точка](images/dot.svg)\n", dir.path()).expect("plain svg compiles");
+    assert!(pdf::looks_like_pdf(&bytes));
+}
+
+/// SVG со ссылкой на внешний ресурс должен отклоняться до вызова Typst
+/// (ТЗ §33.3, code-analysis §5): без этой проверки документ мог бы утечь
+/// сетевой запрос или прочитать произвольный локальный файл через `<image>`.
+#[test]
+fn an_svg_with_an_external_reference_is_refused_before_typst() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    std::fs::create_dir(dir.path().join("images")).expect("create dir");
+    let svg =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/images/external-href.svg");
+    std::fs::copy(&svg, dir.path().join("images/external-href.svg")).expect("copy fixture");
+
+    let err = compile_in("![внешняя](images/external-href.svg)\n", dir.path())
+        .expect_err("svg with an external reference must be rejected");
+    match err {
+        CompileError::Image { message, .. } => {
+            assert!(
+                message.contains("external"),
+                "message does not mention the external reference: {message}"
+            );
+        }
+        other => panic!("expected an image error, got {other:?}"),
+    }
+}
+
+#[test]
 fn network_images_never_reach_the_compiler() {
     // Отсекается ещё валидацией AST (ТЗ §10.12), до этапа компиляции.
     let result = MarkdownParser::default().parse("![сеть](https://example.com/a.png)\n");

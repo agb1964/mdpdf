@@ -111,11 +111,27 @@ pub fn resolve_resources(
         }
 
         // Формат проверяется до вызова Typst, чтобы ошибка была понятной (ТЗ §33.3).
-        detect_format(&bytes).ok_or_else(|| CompileError::Image {
+        let format = detect_format(&bytes).ok_or_else(|| CompileError::Image {
             path: resource.source_path.clone(),
             span: resource.span,
             message: "unsupported image format: expected PNG, JPEG, GIF or SVG".to_owned(),
         })?;
+
+        // SVG «без внешних ресурсов» (см. документацию модуля) проверяется
+        // отдельно: формат определяется по одному тегу `<svg`, но сам файл
+        // может содержать ссылку на сеть или на произвольный локальный файл
+        // (ТЗ §33.3, code-analysis §5).
+        if format == ImageFormat::Svg
+            && let Some(reference) = svg_external_reference(&bytes)
+        {
+            return Err(CompileError::Image {
+                path: resource.source_path.clone(),
+                span: resource.span,
+                message: format!(
+                    "SVG references an external resource ({reference}), which is not allowed"
+                ),
+            });
+        }
 
         resolved.files.insert(resource.logical_path.clone(), bytes);
     }
@@ -169,8 +185,26 @@ fn read_resource(resource: &ResourceReference, root: &Path) -> Result<Vec<u8>, C
         return Err(access("image resolves outside the document directory"));
     }
 
-    let metadata =
-        fs::metadata(&resolved).map_err(|error| image(format!("cannot read metadata: {error}")))?;
+    // Файл открывается один раз, а `metadata()` и чтение выполняются через тот
+    // же дескриптор, а не тремя независимыми обращениями к пути. Это убирает
+    // окно TOCTOU между проверкой метаданных и чтением: после открытия
+    // дескриптор ссылается на конкретный inode независимо от того, что потом
+    // происходит с именем файла на диске.
+    //
+    // Остаточный риск: окно между `canonicalize` выше и `File::open` здесь
+    // никуда не делось. Если между этими двумя шагами компонент пути будет
+    // подменён на симлинк, `File::open` откроет уже новую цель, и проверка
+    // `starts_with(root)` её не увидит. Закрыть это полностью можно только
+    // platform-specific средствами (`O_NOFOLLOW` в связке с `openat`,
+    // `openat2(RESOLVE_NO_SYMLINKS)` в Linux) — на std они недоступны, а
+    // заводить unsafe FFI ради одного этапа компиляции, читающего локальные
+    // ресурсы автора документа, признано избыточным для первой версии.
+    let mut file =
+        fs::File::open(&resolved).map_err(|error| image(format!("cannot read file: {error}")))?;
+
+    let metadata = file
+        .metadata()
+        .map_err(|error| image(format!("cannot read metadata: {error}")))?;
     if !metadata.is_file() {
         return Err(image("not a regular file".to_owned()));
     }
@@ -184,7 +218,10 @@ fn read_resource(resource: &ResourceReference, root: &Path) -> Result<Vec<u8>, C
         });
     }
 
-    fs::read(&resolved).map_err(|error| image(format!("cannot read file: {error}")))
+    let mut bytes = Vec::new();
+    std::io::Read::read_to_end(&mut file, &mut bytes)
+        .map_err(|error| image(format!("cannot read file: {error}")))?;
+    Ok(bytes)
 }
 
 /// Определение формата по содержимому, а не по расширению (ТЗ §33.3).
@@ -212,6 +249,70 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
     };
     let text = text.trim_start_matches('\u{feff}').trim_start();
     text.starts_with("<svg") || (text.starts_with("<?xml") && text.contains("<svg"))
+}
+
+/// Схемы, запрещённые в `href`/`xlink:href` внутри SVG (ТЗ §33.3).
+///
+/// `data:` запрещена наравне с сетевыми и файловыми схемами: это тоже способ
+/// протащить произвольный, неограниченный по размеру и неучтённый лимитами
+/// (ТЗ §40) блок байт в обход проверки самого файла-изображения.
+const FORBIDDEN_SVG_SCHEMES: &[&str] = &["http:", "https:", "file:", "data:"];
+
+/// Ищет в SVG ссылку на внешний ресурс через `href`/`xlink:href`.
+///
+/// Полноценный XML-парсер здесь не нужен (задача прямо это исключает):
+/// достаточно построчного поиска атрибута и разбора значения в кавычках —
+/// SVG с легитимным локальным содержимым (например, `tests/fixtures/images/dot.svg`)
+/// такого атрибута вообще не содержит. Возвращает значение атрибута для
+/// сообщения об ошибке.
+fn svg_external_reference(bytes: &[u8]) -> Option<String> {
+    let text = String::from_utf8_lossy(bytes);
+    let lower = text.to_lowercase();
+    let bytes = lower.as_bytes();
+
+    let mut search_from = 0usize;
+    while let Some(found) = lower[search_from..].find("href") {
+        let href_start = search_from + found;
+        let after_href = href_start + "href".len();
+
+        // Между `href` и `=` допускаются пробелы (`href = "..."`).
+        let mut cursor = after_href;
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+        if bytes.get(cursor) != Some(&b'=') {
+            search_from = after_href;
+            continue;
+        }
+        cursor += 1;
+        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor += 1;
+        }
+
+        let Some(&quote) = bytes.get(cursor) else {
+            break;
+        };
+        if quote != b'"' && quote != b'\'' {
+            search_from = after_href;
+            continue;
+        }
+        let value_start = cursor + 1;
+        let Some(value_end) = lower[value_start..].find(quote as char) else {
+            break;
+        };
+        let value = lower[value_start..value_start + value_end].trim();
+
+        if FORBIDDEN_SVG_SCHEMES
+            .iter()
+            .any(|scheme| value.starts_with(scheme))
+        {
+            return Some(value.to_owned());
+        }
+
+        search_from = value_start + value_end;
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -249,6 +350,92 @@ mod tests {
         );
         assert_eq!(detect_format(b"not an image"), None);
         assert_eq!(detect_format(b""), None);
+    }
+
+    #[test]
+    fn svg_with_no_href_has_no_external_reference() {
+        assert_eq!(
+            svg_external_reference(b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle/></svg>"),
+            None
+        );
+    }
+
+    #[test]
+    fn svg_with_a_local_fragment_href_is_allowed() {
+        assert_eq!(
+            svg_external_reference(
+                b"<svg><use href=\"#icon\"/><use xlink:href=\"local.svg#a\"/></svg>"
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn svg_referencing_http_is_rejected() {
+        let value =
+            svg_external_reference(b"<svg><image href=\"http://example.com/a.png\"/></svg>");
+        assert_eq!(value.as_deref(), Some("http://example.com/a.png"));
+    }
+
+    #[test]
+    fn svg_referencing_https_via_xlink_href_is_rejected() {
+        let value =
+            svg_external_reference(b"<svg><image xlink:href=\"https://example.com/a.png\"/></svg>");
+        assert_eq!(value.as_deref(), Some("https://example.com/a.png"));
+    }
+
+    #[test]
+    fn svg_referencing_a_local_file_scheme_is_rejected() {
+        let value = svg_external_reference(b"<svg><image href=\"file:///etc/passwd\"/></svg>");
+        assert_eq!(value.as_deref(), Some("file:///etc/passwd"));
+    }
+
+    #[test]
+    fn svg_referencing_a_data_uri_is_rejected() {
+        let value =
+            svg_external_reference(b"<svg><image href=\"data:image/png;base64,AAAA\"/></svg>");
+        assert_eq!(value.as_deref(), Some("data:image/png;base64,aaaa"));
+    }
+
+    #[test]
+    fn an_svg_with_an_external_reference_is_rejected_before_typst() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(
+            dir.path().join("a.svg"),
+            b"<svg><image href=\"https://example.com/a.png\"/></svg>",
+        )
+        .expect("write svg");
+
+        let err = resolve_resources(
+            &[reference("a.svg", "/mdpdf-resources/000001.svg")],
+            dir.path(),
+            "doc.md",
+        )
+        .expect_err("external SVG reference must be rejected");
+        match err {
+            CompileError::Image { message, .. } => {
+                assert!(message.contains("external"), "message: {message}");
+            }
+            other => panic!("expected an image error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_plain_svg_without_external_references_is_accepted() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(
+            dir.path().join("a.svg"),
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"1\"/></svg>",
+        )
+        .expect("write svg");
+
+        let resolved = resolve_resources(
+            &[reference("a.svg", "/mdpdf-resources/000001.svg")],
+            dir.path(),
+            "doc.md",
+        )
+        .expect("plain svg must be accepted");
+        assert_eq!(resolved.len(), 1);
     }
 
     #[test]
@@ -372,6 +559,30 @@ mod tests {
             .collect();
         let err = resolve_resources(&many, dir.path(), "doc.md").expect_err("too many images");
         assert!(matches!(err, CompileError::LimitExceeded { .. }));
+    }
+
+    /// Симлинк внутри каталога документа, ведущий наружу, должен отклоняться
+    /// так же, как обычный `../..` (ТЗ §33.2, code-analysis §5).
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_escaping_the_document_directory_is_rejected() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let inner = dir.path().join("doc");
+        std::fs::create_dir(&inner).expect("create dir");
+        let outside = dir.path().join("secret.png");
+        std::fs::write(&outside, PNG).expect("write outside");
+
+        symlink(&outside, inner.join("link.png")).expect("create symlink");
+
+        let err = resolve_resources(
+            &[reference("link.png", "/mdpdf-resources/000001.png")],
+            &inner,
+            "doc.md",
+        )
+        .expect_err("symlink escaping the document directory must be rejected");
+        assert!(matches!(err, CompileError::ResourceAccess { .. }));
     }
 
     #[test]

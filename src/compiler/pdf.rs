@@ -1,5 +1,6 @@
 //! Компиляция Typst и экспорт в PDF (ТЗ §35, §39).
 
+use typst::diag::SourceDiagnostic;
 use typst_layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
@@ -32,13 +33,21 @@ pub fn compile(world: &MdpdfWorld) -> Result<CompiledPdf, CompileError> {
     let compiled = typst::compile::<PagedDocument>(world);
     let warnings = diagnostics::convert(world, &compiled.warnings);
 
+    // `PdfCompiler::compile` (ТЗ §31) закреплена и возвращает только байты, а
+    // `CompileError::Typst` несёт один список диагностик — своего поля для
+    // предупреждений у него нет и заводить его нельзя, не сломав сопоставление
+    // с образцом в src/app.rs (там переменная не помечена как исчерпывающая).
+    // Поэтому предупреждения, собранные выше, подмешиваются в тот же список
+    // диагностик об ошибке: `Diagnostic::render` уже печатает уровень
+    // (`warning`/`error`), так что они остаются различимы, а ТЗ §38 —
+    // «предупреждения нельзя терять» — соблюдается и на пути ошибки.
     let document = compiled.output.map_err(|errors| CompileError::Typst {
-        diagnostics: diagnostics::convert(world, errors.as_slice()),
+        diagnostics: merge_diagnostics(world, errors.as_slice(), &warnings),
     })?;
 
     let bytes = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|errors| {
         CompileError::Typst {
-            diagnostics: diagnostics::convert(world, errors.as_slice()),
+            diagnostics: merge_diagnostics(world, errors.as_slice(), &warnings),
         }
     })?;
 
@@ -52,6 +61,18 @@ pub fn compile(world: &MdpdfWorld) -> Result<CompiledPdf, CompileError> {
     }
 
     Ok(CompiledPdf { bytes, warnings })
+}
+
+/// Ошибки Typst плюс ранее собранные предупреждения в одном списке
+/// диагностик (ТЗ §38, см. комментарий в `compile`).
+fn merge_diagnostics(
+    world: &MdpdfWorld,
+    errors: &[SourceDiagnostic],
+    warnings: &[Diagnostic],
+) -> Vec<Diagnostic> {
+    let mut diagnostics = diagnostics::convert(world, errors);
+    diagnostics.extend(warnings.iter().cloned());
+    diagnostics
 }
 
 /// Быстрая проверка байтов PDF (ТЗ §39).
@@ -136,6 +157,34 @@ mod tests {
         let source = diagnostics[0].source.as_ref().expect("position is known");
         assert_eq!(source.file, crate::compiler::diagnostics::GENERATED_TYPST);
         assert_eq!(source.line, Some(3));
+    }
+
+    /// ТЗ §38: предупреждения нельзя терять — в том числе когда компиляция
+    /// в итоге проваливается. Раньше `warnings`, собранные до вызова
+    /// `compiled.output`, в этом случае отбрасывались (code-analysis §5).
+    #[test]
+    fn warnings_survive_a_failed_compilation() {
+        let err = compile_source(
+            "#set text(font: \"NonexistentFontXYZ123\")\nтекст\n\n#undefined-name\n",
+        )
+        .expect_err("undefined variable must fail compilation");
+        let CompileError::Typst { diagnostics } = err else {
+            panic!("expected Typst diagnostics");
+        };
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error
+                    && diagnostic.message.contains("undefined-name")),
+            "error diagnostic is missing: {diagnostics:?}"
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Warning
+                    && diagnostic.message.contains("unknown font family")),
+            "warning was lost on the error path: {diagnostics:?}"
+        );
     }
 
     #[test]
