@@ -76,7 +76,11 @@
       align(right, text(size: 0.7em, fill: luma(110), language))
     }
     set par(justify: false, leading: 0.55em)
-    text(font: mono-font, size: 0.85em, raw(body, block: true))
+    // Именно `show raw:`, а не `text(font: ..)`: элемент `raw` ставит свой
+    // шрифт собственным show-правилом, и обёртка в `text` его не перебивает —
+    // код молча выводился основным пропорциональным шрифтом.
+    show raw: set text(font: mono-font, size: 0.85em)
+    raw(body, block: true)
   },
 )
 
@@ -86,7 +90,11 @@
   inset: (x: 3pt, y: 0pt),
   outset: (y: 3pt),
   radius: 2pt,
-  text(font: mono-font, size: 0.9em, raw(body)),
+  {
+    // См. комментарий в mdpdf-code: `raw` перебивает внешний `text(font: ..)`.
+    show raw: set text(font: mono-font, size: 0.9em)
+    raw(body)
+  },
 )
 
 // Цитата. Может содержать вложенные блоки, включая другие цитаты.
