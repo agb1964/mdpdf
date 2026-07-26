@@ -2,8 +2,6 @@
 //!
 //! Порядок шагов зафиксирован: чтение → парсинг → валидация → генерация Typst →
 //! (диагностический вывод) → компиляция → атомарная запись PDF.
-//! Реализованы шаги до построения AST включительно; генерация Typst и
-//! компиляция появятся на Milestone 2–3.
 
 use std::fs;
 use std::path::Path;
@@ -18,6 +16,7 @@ use crate::config::AppConfig;
 use crate::error::{AppError, ExitStatus};
 use crate::markdown::error::MarkdownError;
 use crate::markdown::parser::MarkdownParser;
+use crate::output;
 use crate::source::{self, SourceDocument};
 use crate::typst_gen::generator::TypstGenerator;
 
@@ -112,21 +111,27 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
         eprintln!("{}", warning.render());
     }
 
-    if config.check {
-        if !config.quiet {
-            println!("Checked {}", document.name);
-        }
-        return Ok(ExitStatus::Success);
-    }
-
     if config.verbose {
         eprintln!("mdpdf: produced {} bytes of PDF", compiled.bytes.len());
     }
 
-    // Milestone 4: атомарная запись результата (ТЗ §6.4).
-    Err(AppError::NotImplemented {
-        feature: "atomic PDF write (Milestone 4)",
-    })
+    // Отсутствие пути здесь означает `--check`: режим «только --emit-*» вышел
+    // раньше, а во всех остальных случаях путь вычислен в AppConfig (ТЗ §5.1).
+    match &config.output {
+        Some(path) => {
+            output::write_pdf_atomically(path, &compiled.bytes, config.overwrite)?;
+            if !config.quiet {
+                println!("Created {}", path.display());
+            }
+        }
+        None => {
+            if !config.quiet {
+                println!("Checked {}", document.name);
+            }
+        }
+    }
+
+    Ok(ExitStatus::Success)
 }
 
 /// Строит AST из прочитанного документа.

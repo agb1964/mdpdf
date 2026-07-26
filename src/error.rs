@@ -159,14 +159,6 @@ pub enum AppError {
         /// Описание нарушения.
         message: String,
     },
-
-    /// Функциональность ещё не реализована. Существует только на этапе каркаса
-    /// и должна исчезнуть по мере выполнения Milestone 1–4.
-    #[error("not implemented yet: {feature}")]
-    NotImplemented {
-        /// Название нереализованного шага конвейера.
-        feature: &'static str,
-    },
 }
 
 impl From<CompileError> for AppError {
@@ -192,7 +184,6 @@ impl AppError {
             },
             Self::Output { .. } | Self::OutputExists { .. } => ExitStatus::OutputError,
             Self::ResourcePolicy { .. } => ExitStatus::ResourcePolicyError,
-            Self::NotImplemented { .. } => ExitStatus::GeneralError,
         }
     }
 }
