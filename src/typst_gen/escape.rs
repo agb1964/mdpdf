@@ -9,6 +9,8 @@
 
 use thiserror::Error;
 
+use crate::typst_gen::RESOURCE_PREFIX;
+
 /// Ошибка экранирования.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum EscapeError {
@@ -110,18 +112,22 @@ pub fn url_literal(value: &str) -> Result<String, EscapeError> {
 
 /// Виртуальный путь ресурса как строковый литерал (ТЗ §23, §24.6).
 ///
-/// Принимает только пути, которые генератор сам и построил: абсолютные,
-/// без `..`, без обратных косых черт и управляющих символов.
+/// Принимает **только** пути, которые построил сам генератор: начинающиеся
+/// с [`RESOURCE_PREFIX`], без `..`, без обратных косых черт и управляющих
+/// символов. Раньше проверялась лишь абсолютность, то есть контракт был шире
+/// заявленного в этой доке: сюда прошёл бы любой абсолютный путь, включая
+/// `/etc/passwd`. Реальный вызов один и передаёт сгенерированный путь, но
+/// полагаться на это — значит держать защиту на честном слове.
 ///
 /// # Errors
 ///
 /// [`EscapeError`], если путь не удовлетворяет этим условиям.
 pub fn path_literal(value: &str) -> Result<String, EscapeError> {
     const CONTEXT: &str = "path";
-    if !value.starts_with('/') {
+    if !value.starts_with(RESOURCE_PREFIX) {
         return Err(EscapeError::invalid(
             CONTEXT,
-            "virtual resource path must be absolute",
+            format!("virtual resource path must start with {RESOURCE_PREFIX}"),
         ));
     }
     if value.contains("..") {
@@ -284,5 +290,24 @@ mod tests {
         assert!(path_literal("/mdpdf-resources/../../etc/passwd").is_err());
         assert!(path_literal("/mdpdf-resources\\a.png").is_err());
         assert!(path_literal("/mdpdf-resources/a\0.png").is_err());
+    }
+
+    #[test]
+    fn path_literal_accepts_nothing_outside_the_resource_prefix() {
+        // Контракт узкий намеренно: функция обслуживает ровно один вызов,
+        // который передаёт путь, построенный генератором (ТЗ §24.6).
+        for outside in [
+            "/etc/passwd",
+            "/main.typ",
+            "/template.typ",
+            "/mdpdf-resource/000001.png",
+            "/",
+            "",
+        ] {
+            assert!(
+                path_literal(outside).is_err(),
+                "path outside the resource prefix must be rejected: {outside}"
+            );
+        }
     }
 }

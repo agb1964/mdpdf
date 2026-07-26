@@ -152,13 +152,6 @@ pub enum AppError {
         /// Путь выходного файла.
         path: PathBuf,
     },
-
-    /// Нарушение политики доступа к ресурсу (ТЗ §33.2).
-    #[error("resource policy violation: {message}")]
-    ResourcePolicy {
-        /// Описание нарушения.
-        message: String,
-    },
 }
 
 impl From<CompileError> for AppError {
@@ -183,7 +176,6 @@ impl AppError {
                 _ => ExitStatus::CompileError,
             },
             Self::Output { .. } | Self::OutputExists { .. } => ExitStatus::OutputError,
-            Self::ResourcePolicy { .. } => ExitStatus::ResourcePolicyError,
         }
     }
 }
@@ -207,10 +199,14 @@ mod tests {
     }
 
     #[test]
-    fn errors_map_to_their_exit_status() {
-        let err = AppError::ResourcePolicy {
-            message: "path traversal".to_owned(),
-        };
+    fn resource_policy_violations_get_their_own_code() {
+        // Код 9 приходит из компилятора: политика доступа к ресурсам живёт там,
+        // и отдельного варианта на уровне приложения для этого не нужно.
+        let err = AppError::Compile(Box::new(CompileError::ResourceAccess {
+            path: "../secret.png".to_owned(),
+            span: None,
+            message: "outside the document directory".to_owned(),
+        }));
         assert_eq!(err.exit_status(), ExitStatus::ResourcePolicyError);
     }
 }
