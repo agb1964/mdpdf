@@ -136,10 +136,10 @@
 }
 
 // Изображение по виртуальному пути (ТЗ §24.6).
-#let mdpdf-image(path: "", alt: none) = figure(
-  image(path, width: 100%),
-  caption: alt,
-)
+// Остаётся inline-элементом: в Markdown изображение живёт внутри абзаца,
+// а блочная figure вызывала бы предупреждение Typst внутри par().
+// alt — это описание для PDF, а не подпись под картинкой.
+#let mdpdf-image(path: "", alt: none) = box(image(path, alt: alt))
 
 // Горизонтальная линия.
 #let mdpdf-rule() = block(
