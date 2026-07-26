@@ -59,6 +59,11 @@ cargo deny check
 
 ## Статус
 
-Milestone 0 (каркас) выполнен. Дальше по ТЗ §60:
-Milestone 1 — Markdown AST, 2 — Typst generator, 3 — embedded compiler,
+Журнал работ, принятые решения и долги — `docs/progress.md`. Обновлять при
+закрытии каждого milestone.
+
+Milestone 0 (каркас) и Milestone 1 (Markdown → AST) выполнены.
+Дальше по ТЗ §60: Milestone 2 — Typst generator, 3 — embedded compiler,
 4 — интеграция CLI, 5 — hardening.
+
+Эталонные AST-файлы обновляются только явной командой `make golden-update` (§46).
