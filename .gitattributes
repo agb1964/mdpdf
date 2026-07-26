@@ -1,0 +1,13 @@
+# Текст хранится и выдаётся с LF: rustfmt настроен на newline_style = "Unix",
+# а в матрице CI есть windows-latest. Правило общее, поэтому идёт первым —
+# перечисленные ниже бинарные типы его перекрывают.
+* text=auto eol=lf
+
+# Бинарные файлы: без diff, без слияния, без нормализации переводов строк.
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary

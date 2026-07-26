@@ -1,0 +1,7 @@
+# Единая версия тулчейна для разработчиков и CI.
+# Проект собирается на стабильном Rust (ТЗ §5, edition 2024).
+
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
