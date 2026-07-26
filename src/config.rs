@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use crate::cli::Cli;
 use crate::error::AppError;
 use crate::output;
+use crate::typst_gen::generator::{Length, RenderOptions};
 
 /// Источник входного документа.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +104,26 @@ impl AppConfig {
             quiet: args.quiet,
             verbose: args.verbose,
         })
+    }
+
+    /// Собирает типизированные параметры рендеринга (ТЗ §20).
+    ///
+    /// # Errors
+    ///
+    /// [`AppError::TypstGeneration`], если размер страницы, поля или размер
+    /// текста заданы недопустимо.
+    pub fn render_options(&self) -> Result<RenderOptions, AppError> {
+        let options = RenderOptions {
+            paper: self.paper.parse()?,
+            margin: Length::parse(&self.margin, "margin")?,
+            font_size: Length::parse(&self.font_size, "font-size")?,
+            title: self.title.clone(),
+            author: self.author.clone(),
+            toc: self.toc,
+            heading_numbers: self.heading_numbers,
+        };
+        options.validate()?;
+        Ok(options)
     }
 
     /// Каталог, относительно которого разрешаются пути изображений (ТЗ §6.3).

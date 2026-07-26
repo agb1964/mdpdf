@@ -26,21 +26,25 @@ pub enum TypstGenerationError {
     },
 
     /// Некорректный адрес ссылки.
-    #[error("invalid url: {value}")]
+    #[error("invalid url {value}: {message}")]
     InvalidUrl {
         /// Исходное значение.
         value: String,
         /// Диапазон исходного Markdown, если он известен.
         span: Option<SourceSpan>,
+        /// Описание проблемы.
+        message: String,
     },
 
     /// Некорректный путь изображения.
-    #[error("invalid image path: {value}")]
+    #[error("invalid image path {value}: {message}")]
     InvalidImagePath {
         /// Исходное значение.
         value: String,
         /// Диапазон исходного Markdown, если он известен.
         span: Option<SourceSpan>,
+        /// Описание проблемы.
+        message: String,
     },
 
     /// Недопустимое значение параметра рендеринга (ТЗ §20.2).

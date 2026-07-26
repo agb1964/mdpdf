@@ -15,6 +15,7 @@ use crate::config::AppConfig;
 use crate::error::{AppError, ExitStatus};
 use crate::markdown::parser::MarkdownParser;
 use crate::source::{self, SourceDocument};
+use crate::typst_gen::generator::TypstGenerator;
 
 /// Выполняет конвейер целиком.
 ///
@@ -47,6 +48,23 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
         }
     }
 
+    let generated = TypstGenerator::new(config.render_options()?).generate(&ast)?;
+
+    if config.verbose {
+        eprintln!(
+            "mdpdf: generated {} bytes of Typst, {} local resources",
+            generated.source.len(),
+            generated.resources.len()
+        );
+    }
+
+    if let Some(path) = &config.emit_typst {
+        write_text(path, &generated.source)?;
+        if !config.quiet {
+            println!("Created {}", path.display());
+        }
+    }
+
     // Диагностический режим: запрошен только --emit-*, выходной PDF не задан,
     // поэтому конвейер на этом заканчивается (ТЗ §5.5, §5.6).
     // `--check`, наоборот, обязан пройти весь конвейер вплоть до компиляции
@@ -55,9 +73,9 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
         return Ok(ExitStatus::Success);
     }
 
-    // Milestone 2: typst_gen::generator::TypstGenerator::generate.
+    // Milestone 3: compiler::EmbeddedTypstCompiler::compile.
     Err(AppError::NotImplemented {
-        feature: "Typst generation (Milestone 2)",
+        feature: "Typst compilation (Milestone 3)",
     })
 }
 
@@ -94,7 +112,12 @@ fn write_ast(path: &Path, document: &Document) -> Result<(), AppError> {
         path: path.to_path_buf(),
         source: std::io::Error::other(error),
     })?;
-    fs::write(path, json + "\n").map_err(|source| AppError::Output {
+    write_text(path, &(json + "\n"))
+}
+
+/// Записывает диагностический текстовый файл (ТЗ §5.5, §5.6).
+fn write_text(path: &Path, contents: &str) -> Result<(), AppError> {
+    fs::write(path, contents).map_err(|source| AppError::Output {
         path: path.to_path_buf(),
         source,
     })
