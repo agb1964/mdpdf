@@ -91,9 +91,12 @@ impl PdfCompiler for EmbeddedTypstCompiler {
 /// Лимиты ресурсов первой версии (ТЗ §40).
 pub mod limits {
     /// Максимальное число узлов AST.
-    pub const MAX_AST_NODES: usize = 1_000_000;
+    ///
+    /// Источник истины — `ast::limits`: лимит соблюдает парсер, компилятору
+    /// он нужен только для справки.
+    pub const MAX_AST_NODES: usize = crate::ast::limits::MAX_AST_NODES;
     /// Максимальная глубина вложенности.
-    pub const MAX_NESTING_DEPTH: usize = 128;
+    pub const MAX_NESTING_DEPTH: usize = crate::ast::limits::MAX_NESTING_DEPTH;
     /// Максимальное число изображений в документе.
     pub const MAX_IMAGES: usize = 1_000;
     /// Максимальный размер одного изображения, байты.
@@ -101,7 +104,11 @@ pub mod limits {
     /// Максимальный суммарный размер изображений, байты.
     pub const MAX_TOTAL_IMAGE_BYTES: usize = 256 * 1024 * 1024;
     /// Максимальная длина URL, байты.
-    pub const MAX_URL_BYTES: usize = 16 * 1024;
+    ///
+    /// Переиспользует константу из `typst_gen::escape`, а не дублирует
+    /// значение: `compiler` уже импортирует `typst_gen` (ТЗ §31), а обратной
+    /// зависимости быть не должно, поэтому источник истины — там.
+    pub const MAX_URL_BYTES: usize = crate::typst_gen::escape::MAX_URL_BYTES;
     /// Максимальная длина одного текстового узла, байты.
     pub const MAX_TEXT_NODE_BYTES: usize = 16 * 1024 * 1024;
 }

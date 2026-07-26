@@ -50,6 +50,15 @@ pub enum MarkdownError {
     #[error(transparent)]
     AstValidation(#[from] AstValidationError),
 
+    /// Превышен лимит структуры документа (ТЗ §40).
+    #[error("document limit exceeded: {message}")]
+    LimitExceeded {
+        /// Какой лимит и на чём превышен.
+        message: String,
+        /// Диапазон исходного Markdown.
+        span: SourceSpan,
+    },
+
     /// Нарушен внутренний инвариант парсера.
     #[error("internal parser invariant violated: {message}")]
     InternalInvariant {
@@ -68,7 +77,8 @@ impl MarkdownError {
             Self::InvalidInput { span, .. } => *span,
             Self::UnsupportedConstruct { span, .. }
             | Self::InvalidNesting { span, .. }
-            | Self::IncompleteDocument { span, .. } => Some(*span),
+            | Self::IncompleteDocument { span, .. }
+            | Self::LimitExceeded { span, .. } => Some(*span),
             Self::AstValidation(error) => Some(error.span()),
             Self::InternalInvariant { .. } => None,
         }

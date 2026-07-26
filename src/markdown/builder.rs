@@ -15,7 +15,7 @@ use crate::ast::block::{
 use crate::ast::document::Document;
 use crate::ast::inline::{Image, Inline, Link};
 use crate::ast::metadata::DocumentMetadata;
-use crate::ast::{SourceSpan, Spanned};
+use crate::ast::{SourceSpan, Spanned, limits};
 use crate::markdown::error::MarkdownError;
 use crate::markdown::state::{
     BlockFrame, CodeBlockFrame, Frame, HeadingFrame, ImageFrame, InlineFrame, LinkFrame, ListFrame,
@@ -27,6 +27,8 @@ use crate::markdown::state::{
 pub struct AstBuilder {
     document: Document,
     stack: Vec<Frame>,
+    /// Число созданных узлов — растёт монотонно, лимит проверяется на входе.
+    nodes: usize,
 }
 
 impl AstBuilder {
@@ -39,6 +41,7 @@ impl AstBuilder {
                 blocks: Vec::new(),
             },
             stack: Vec::new(),
+            nodes: 0,
         }
     }
 
@@ -52,11 +55,24 @@ impl AstBuilder {
         match event {
             Event::Start(tag) => self.start(tag, span),
             Event::End(tag) => self.end(tag, span),
-            Event::Text(text) => self.text(&text, span),
-            Event::Code(code) => self.push_inline(Inline::Code(code.into_string()), span),
-            Event::SoftBreak => self.push_inline(Inline::SoftBreak, span),
-            Event::HardBreak => self.push_inline(Inline::HardBreak, span),
+            Event::Text(text) => {
+                self.count_node(span)?;
+                self.text(&text, span)
+            }
+            Event::Code(code) => {
+                self.count_node(span)?;
+                self.push_inline(Inline::Code(code.into_string()), span)
+            }
+            Event::SoftBreak => {
+                self.count_node(span)?;
+                self.push_inline(Inline::SoftBreak, span)
+            }
+            Event::HardBreak => {
+                self.count_node(span)?;
+                self.push_inline(Inline::HardBreak, span)
+            }
             Event::Rule => {
+                self.count_node(span)?;
                 self.close_implicit_paragraph()?;
                 self.push_block(Spanned::new(Block::ThematicBreak, span))
             }
@@ -93,7 +109,38 @@ impl AstBuilder {
         Ok(self.document)
     }
 
+    /// Проверяет лимиты структуры до создания кадра (ТЗ §40).
+    ///
+    /// Без этой проверки документ вроде `>>>>…` на пять тысяч уровней роняет
+    /// процесс переполнением стека при обходе готового AST — не ошибкой,
+    /// а аварийным завершением.
+    fn enter_container(&mut self, span: SourceSpan) -> Result<(), MarkdownError> {
+        if self.stack.len() >= limits::MAX_NESTING_DEPTH {
+            return Err(MarkdownError::LimitExceeded {
+                message: format!(
+                    "nesting is deeper than {} containers",
+                    limits::MAX_NESTING_DEPTH
+                ),
+                span,
+            });
+        }
+        self.count_node(span)
+    }
+
+    /// Учитывает созданный узел и проверяет их общее число (ТЗ §40).
+    fn count_node(&mut self, span: SourceSpan) -> Result<(), MarkdownError> {
+        self.nodes += 1;
+        if self.nodes > limits::MAX_AST_NODES {
+            return Err(MarkdownError::LimitExceeded {
+                message: format!("document has more than {} nodes", limits::MAX_AST_NODES),
+                span,
+            });
+        }
+        Ok(())
+    }
+
     fn start(&mut self, tag: Tag<'_>, span: SourceSpan) -> Result<(), MarkdownError> {
+        self.enter_container(span)?;
         match tag {
             Tag::Paragraph => {
                 self.close_implicit_paragraph()?;
