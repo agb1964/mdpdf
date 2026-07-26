@@ -69,7 +69,8 @@ impl MarkdownError {
             Self::UnsupportedConstruct { span, .. }
             | Self::InvalidNesting { span, .. }
             | Self::IncompleteDocument { span, .. } => Some(*span),
-            Self::AstValidation(_) | Self::InternalInvariant { .. } => None,
+            Self::AstValidation(error) => Some(error.span()),
+            Self::InternalInvariant { .. } => None,
         }
     }
 }

@@ -94,6 +94,25 @@ pub enum AstValidationError {
     },
 }
 
+impl AstValidationError {
+    /// Диапазон в исходном Markdown. Есть у каждого варианта: валидация
+    /// работает по уже построенному AST, где диапазоны обязательны (ТЗ §11).
+    #[must_use]
+    pub const fn span(&self) -> SourceSpan {
+        match self {
+            Self::TableWithoutColumns { span }
+            | Self::AlignmentCountMismatch { span, .. }
+            | Self::RowWidthMismatch { span, .. }
+            | Self::EmptyList { span }
+            | Self::ZeroOrderedListStart { span }
+            | Self::NestedLink { span }
+            | Self::NestedImage { span }
+            | Self::NetworkImage { span, .. }
+            | Self::InvalidSpan { span } => *span,
+        }
+    }
+}
+
 /// Проверяет инварианты документа.
 ///
 /// Пустой Markdown — корректный документ.

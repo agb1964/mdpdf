@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::Path;
 
+use crate::ast::SourceSpan;
 use crate::ast::document::Document;
 use crate::ast::metadata::DocumentMetadata;
 use crate::cli::Cli;
@@ -15,6 +16,7 @@ use crate::compiler::error::CompileError;
 use crate::compiler::{CompileInput, EmbeddedTypstCompiler};
 use crate::config::AppConfig;
 use crate::error::{AppError, ExitStatus};
+use crate::markdown::error::MarkdownError;
 use crate::markdown::parser::MarkdownParser;
 use crate::source::{self, SourceDocument};
 use crate::typst_gen::generator::TypstGenerator;
@@ -140,16 +142,33 @@ fn parse(document: &SourceDocument, config: &AppConfig) -> Result<Document, AppE
 
     parser
         .parse(&document.text)
-        .map_err(|error| match error.span() {
-            Some(span) => {
-                let (line, column) = span.line_column(&document.text);
-                AppError::MarkdownAt {
-                    location: format!("{}:{line}:{column}", document.name),
-                    source: error,
-                }
-            }
+        .map_err(|error| markdown_error(error, document))
+}
+
+/// Переводит ошибку парсера в ошибку приложения, сохраняя позицию и правильный
+/// код завершения.
+///
+/// Ошибка валидации AST разворачивается из [`MarkdownError::AstValidation`]:
+/// у неё собственный код 5, а не общий код Markdown 4 (ТЗ §43).
+fn markdown_error(error: MarkdownError, document: &SourceDocument) -> AppError {
+    let location = |span: SourceSpan| {
+        let (line, column) = span.line_column(&document.text);
+        format!("{}:{line}:{column}", document.name)
+    };
+
+    match error {
+        MarkdownError::AstValidation(error) => AppError::AstValidationAt {
+            location: location(error.span()),
+            source: error,
+        },
+        error => match error.span() {
+            Some(span) => AppError::MarkdownAt {
+                location: location(span),
+                source: error,
+            },
             None => AppError::Markdown(error),
-        })
+        },
+    }
 }
 
 /// Записывает AST в JSON (ТЗ §5.6).

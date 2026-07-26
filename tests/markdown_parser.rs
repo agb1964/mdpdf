@@ -723,8 +723,10 @@ mod builder_invariants {
         };
         assert_eq!(internal.span(), None);
 
+        // Ошибка валидации тоже несёт позицию: без неё диагностика осталась бы
+        // без `файл:строка:столбец`, а код завершения — 4 вместо 5 (ТЗ §16, §43).
         let validation =
             MarkdownError::AstValidation(AstValidationError::EmptyList { span: span() });
-        assert_eq!(validation.span(), None);
+        assert_eq!(validation.span(), Some(span()));
     }
 }

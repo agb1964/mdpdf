@@ -103,6 +103,17 @@ pub enum AppError {
     #[error(transparent)]
     AstValidation(#[from] AstValidationError),
 
+    /// Та же ошибка с позицией в исходном файле (ТЗ §16):
+    /// `input.md:3:1: network image source is not allowed`.
+    #[error("{location}: {source}")]
+    AstValidationAt {
+        /// Префикс `файл:строка:столбец`.
+        location: String,
+        /// Исходная ошибка.
+        #[source]
+        source: AstValidationError,
+    },
+
     /// Ошибка этапа 2 — генерация Typst.
     #[error(transparent)]
     TypstGeneration(#[from] TypstGenerationError),
@@ -172,7 +183,7 @@ impl AppError {
             Self::Cli { .. } => ExitStatus::CliError,
             Self::Input { .. } | Self::InvalidInput { .. } => ExitStatus::InputError,
             Self::Markdown(_) | Self::MarkdownAt { .. } => ExitStatus::MarkdownError,
-            Self::AstValidation(_) => ExitStatus::AstValidationError,
+            Self::AstValidation(_) | Self::AstValidationAt { .. } => ExitStatus::AstValidationError,
             Self::TypstGeneration(_) => ExitStatus::TypstGenerationError,
             // Нарушение политики доступа к ресурсу имеет собственный код (ТЗ §43).
             Self::Compile(error) | Self::CompileAt { source: error, .. } => match **error {
