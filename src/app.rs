@@ -47,6 +47,14 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
         }
     }
 
+    // Диагностический режим: запрошен только --emit-*, выходной PDF не задан,
+    // поэтому конвейер на этом заканчивается (ТЗ §5.5, §5.6).
+    // `--check`, наоборот, обязан пройти весь конвейер вплоть до компиляции
+    // и лишь не записывать PDF (ТЗ §5.4), поэтому сюда не попадает.
+    if !config.check && config.output.is_none() {
+        return Ok(ExitStatus::Success);
+    }
+
     // Milestone 2: typst_gen::generator::TypstGenerator::generate.
     Err(AppError::NotImplemented {
         feature: "Typst generation (Milestone 2)",
