@@ -1,0 +1,46 @@
+[package]
+name = "mdpdf-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Отдельный крейт cargo-fuzz. Требует nightly-тулчейн, поэтому не входит
+# в основной workspace и не участвует в `cargo build`/`cargo test`/`cargo clippy`
+# основного проекта (ТЗ §50). Собственный `[workspace]` ниже нужен, чтобы cargo
+# не пытался объединить этот крейт с корневым пакетом при поиске workspace.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.mdpdf]
+path = ".."
+
+[[bin]]
+name = "fuzz_markdown_parser"
+path = "fuzz_targets/fuzz_markdown_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_typst_escape"
+path = "fuzz_targets/fuzz_typst_escape.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ast_validation"
+path = "fuzz_targets/fuzz_ast_validation.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1
+
+[workspace]
+members = ["."]

@@ -1,0 +1,5 @@
+# cargo-fuzz умеет собираться только на nightly (нужен -Z sanitizer и
+# libfuzzer-sys). Файл лежит именно в fuzz/, чтобы основной проект
+# (rust-toolchain.toml в корне) оставался на stable — ТЗ §5.
+[toolchain]
+channel = "nightly"

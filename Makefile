@@ -64,8 +64,23 @@ golden-update: ## Перезаписать эталонные AST- и Typst-фа
 coverage: ## Покрытие тестами, падает ниже 90% (ТЗ §17, §29)
 	$(CARGO) llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
 
-fuzz: ## Fuzzing (ТЗ §50, требует nightly и cargo-fuzz)
-	@echo "fuzz targets появятся на Milestone 5 (ТЗ §50)"
+FUZZ_TIME ?= 60
+
+fuzz: ## Fuzzing, по $(FUZZ_TIME)с на таргет (ТЗ §50, требует nightly и cargo-fuzz)
+	@if ! rustup toolchain list 2>/dev/null | grep -q '^nightly'; then \
+		echo "fuzz: нужен nightly-тулчейн, он не установлен."; \
+		echo "      поставьте: rustup toolchain install nightly"; \
+		exit 1; \
+	fi
+	@if ! command -v cargo-fuzz >/dev/null 2>&1; then \
+		echo "fuzz: не найден cargo-fuzz."; \
+		echo "      поставьте: cargo install cargo-fuzz"; \
+		exit 1; \
+	fi
+	@for target in fuzz_markdown_parser fuzz_typst_escape fuzz_ast_validation; do \
+		echo "== $$target: $(FUZZ_TIME)с =="; \
+		( cd fuzz && cargo +nightly fuzz run $$target -- -max_total_time=$(FUZZ_TIME) ) || exit 1; \
+	done
 
 ## --- Обслуживание ------------------------------------------------------------
 
