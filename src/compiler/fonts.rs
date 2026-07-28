@@ -2,6 +2,11 @@
 //!
 //! Байты подключаются через `include_bytes!`, системные шрифты не используются,
 //! порядок регистрации детерминирован, разбор выполняется один раз на процесс.
+//!
+//! Состав шире перечня §34: к пяти начертаниям Noto Sans добавлен
+//! Noto Color Emoji. Без него эмодзи молча исчезали из PDF — глифов нет ни
+//! в одном текстовом начертании, а подставить системный шрифт запрещает §32.
+//! Расширение согласовано с заказчиком; цена — рост бинарника на ~10 МБ.
 
 use std::sync::OnceLock;
 
@@ -23,13 +28,27 @@ pub const NOTO_SANS_BOLD_ITALIC: &[u8] =
 pub const NOTO_SANS_MONO_REGULAR: &[u8] =
     include_bytes!("../../assets/fonts/NotoSansMono-Regular.ttf");
 
-/// Все встроенные шрифты в детерминированном порядке регистрации (ТЗ §34).
-pub const EMBEDDED_FONTS: [&[u8]; 5] = [
+/// Noto Color Emoji. Цветной растровый шрифт (CBDT/CBLC): Typst кладёт глифы
+/// в PDF как ICC-цветные изображения с альфа-каналом, поэтому цвет сохраняется.
+pub const NOTO_COLOR_EMOJI: &[u8] = include_bytes!("../../assets/fonts/NotoColorEmoji.ttf");
+
+/// Начертания основного текста. Именно они обязаны покрывать кириллицу (§34).
+pub const TEXT_FONTS: [&[u8]; 5] = [
     NOTO_SANS_REGULAR,
     NOTO_SANS_BOLD,
     NOTO_SANS_ITALIC,
     NOTO_SANS_BOLD_ITALIC,
     NOTO_SANS_MONO_REGULAR,
+];
+
+/// Все встроенные шрифты в детерминированном порядке регистрации (ТЗ §34).
+pub const EMBEDDED_FONTS: [&[u8]; 6] = [
+    NOTO_SANS_REGULAR,
+    NOTO_SANS_BOLD,
+    NOTO_SANS_ITALIC,
+    NOTO_SANS_BOLD_ITALIC,
+    NOTO_SANS_MONO_REGULAR,
+    NOTO_COLOR_EMOJI,
 ];
 
 /// Разобранные шрифты вместе с каталогом для Typst.
@@ -130,14 +149,34 @@ mod tests {
     }
 
     #[test]
-    fn every_face_covers_cyrillic() {
+    fn every_text_face_covers_cyrillic() {
         let set = embedded_fonts().expect("fonts parse");
-        for index in 0..set.len() {
+        // Проверяются только текстовые начертания: эмодзи-шрифт кириллицу
+        // не покрывает и не должен — он подключён ради символов, которых нет
+        // в Noto Sans.
+        for index in 0..TEXT_FONTS.len() {
             let font = set.font(index).expect("font exists");
             // U+0410 «А» — базовая кириллическая буква.
             assert!(
                 font.info().coverage.contains(0x0410),
-                "font #{index} has no Cyrillic coverage"
+                "text font #{index} has no Cyrillic coverage"
+            );
+        }
+    }
+
+    #[test]
+    fn the_emoji_face_covers_what_text_faces_do_not() {
+        let set = embedded_fonts().expect("fonts parse");
+        let emoji = set
+            .font(TEXT_FONTS.len())
+            .expect("emoji font is registered last");
+        // 🔴 U+1F534 — из-за него эмодзи и понадобились: в Noto Sans его нет.
+        assert!(emoji.info().coverage.contains(0x0001_F534));
+        for index in 0..TEXT_FONTS.len() {
+            let text = set.font(index).expect("font exists");
+            assert!(
+                !text.info().coverage.contains(0x0001_F534),
+                "text font #{index} unexpectedly covers an emoji"
             );
         }
     }
