@@ -11,6 +11,7 @@ use crate::ast::document::Document;
 use crate::ast::metadata::DocumentMetadata;
 use crate::cli::Cli;
 use crate::compiler::error::CompileError;
+use crate::compiler::fonts;
 use crate::compiler::{CompileInput, EmbeddedTypstCompiler};
 use crate::config::AppConfig;
 use crate::error::{AppError, ExitStatus};
@@ -50,6 +51,8 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
             println!("Created {}", path.display());
         }
     }
+
+    warn_about_missing_glyphs(&document, &config)?;
 
     let generated = TypstGenerator::new(config.render_options()?).generate(&ast)?;
 
@@ -132,6 +135,52 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
     }
 
     Ok(ExitStatus::Success)
+}
+
+/// Предупреждает о символах, для которых нет глифа ни в одном встроенном
+/// шрифте (ТЗ §38).
+///
+/// Такой символ не превращается в замещающий прямоугольник — он просто
+/// исчезает, и без предупреждения пользователь узнаёт о потере, только сверив
+/// PDF с исходником. PDF при этом создаётся: решение, приемлема ли потеря,
+/// принимает человек.
+fn warn_about_missing_glyphs(
+    document: &SourceDocument,
+    config: &AppConfig,
+) -> Result<(), AppError> {
+    let uncovered = fonts::uncovered_characters(&document.text)?;
+    if uncovered.is_empty() {
+        return Ok(());
+    }
+
+    let total: usize = uncovered.iter().map(|(_, count)| count).sum();
+    // В строку попадает не более десяти видов символов: при поломанной
+    // кодировке их могут быть сотни, и вывод стал бы нечитаемым.
+    let shown: Vec<String> = uncovered
+        .iter()
+        .take(10)
+        .map(|(character, count)| format!("{character} (U+{:04X}) — {count}", *character as u32))
+        .collect();
+    let tail = if uncovered.len() > shown.len() {
+        format!(", ещё {} видов", uncovered.len() - shown.len())
+    } else {
+        String::new()
+    };
+
+    eprintln!(
+        "{}: warning: {total} character(s) have no glyph in the embedded fonts \
+         and will be missing from the PDF: {}{tail}",
+        document.name,
+        shown.join(", ")
+    );
+
+    if config.verbose {
+        eprintln!(
+            "mdpdf: подставить системный шрифт нельзя — окружение компиляции \
+             намеренно закрыто (ТЗ §32)"
+        );
+    }
+    Ok(())
 }
 
 /// Строит AST из прочитанного документа.

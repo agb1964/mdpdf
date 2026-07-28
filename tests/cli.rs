@@ -227,6 +227,40 @@ fn verbose_prints_pipeline_diagnostics_to_stderr() {
     assert_is_pdf(&dir.path().join("doc.pdf"));
 }
 
+/// Символ без глифа не превращается в замещающий прямоугольник — он молча
+/// исчезает из PDF. Без предупреждения пользователь узнаёт о потере, только
+/// сверив результат с исходником (ТЗ §38).
+#[test]
+fn characters_without_glyphs_are_reported_but_do_not_stop_the_pipeline() {
+    // U+E000 — область частного использования: глифа нет ни в одном
+    // из встроенных шрифтов.
+    let (dir, input) = document("# Заголовок\n\nтекст \u{E000} дальше\n");
+
+    mdpdf()
+        .arg(&input)
+        .assert()
+        .success()
+        .stderr(contains("no glyph"))
+        .stderr(contains("U+E000"));
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
+#[test]
+fn emoji_do_not_trigger_the_missing_glyph_warning() {
+    // Регрессия: ради этих символов и встроен Noto Color Emoji.
+    let (dir, input) = document("# Отметки\n\n🔴 срочно 🟡 позже 🟢 к запуску\n");
+
+    let assert = mdpdf().arg(&input).assert().success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        !stderr.contains("no glyph"),
+        "emoji reported as missing: {stderr}"
+    );
+
+    assert_is_pdf(&dir.path().join("doc.pdf"));
+}
+
 // --- невалидные значения длины (ТЗ §20.2, код завершения 6) --------------------
 //
 // Диапазоны проверяются юнит-тестами в `src/typst_gen/generator.rs`, но через
