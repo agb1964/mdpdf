@@ -193,8 +193,16 @@ mod tests {
     fn every_embedded_font_is_reachable() {
         let world = world("");
         assert!(world.font(0).is_some());
-        assert!(world.font(4).is_some());
-        assert!(world.font(5).is_none());
+        assert!(
+            world
+                .font(crate::compiler::fonts::EMBEDDED_FONTS.len() - 1)
+                .is_some()
+        );
+        assert!(
+            world
+                .font(crate::compiler::fonts::EMBEDDED_FONTS.len())
+                .is_none()
+        );
         assert!(world.book().families().count() > 0);
     }
 }
