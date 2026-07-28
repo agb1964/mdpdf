@@ -1,4 +1,4 @@
-# Отдельный автономный бинарник на каждую платформу из ТЗ §4.
+# Отдельный автономный бинарник на каждую платформу из ТЗ §21.
 
 name: Release
 
@@ -46,7 +46,8 @@ jobs:
           mkdir -p dist
           tar -czf "dist/mdpdf-${{ matrix.target }}.tar.gz" \
             -C "target/${{ matrix.target }}/release" mdpdf
-          cp assets/fonts/OFL.txt LICENSE-MIT LICENSE-APACHE dist/
+          cp assets/fonts/OFL.txt assets/fonts/LICENSE-NotoColorEmoji.txt \
+            LICENSE-MIT LICENSE-APACHE dist/
 
       - name: Package (windows)
         if: runner.os == 'Windows'

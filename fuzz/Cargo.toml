@@ -6,7 +6,7 @@ publish = false
 
 # Отдельный крейт cargo-fuzz. Требует nightly-тулчейн, поэтому не входит
 # в основной workspace и не участвует в `cargo build`/`cargo test`/`cargo clippy`
-# основного проекта (ТЗ §50). Собственный `[workspace]` ниже нужен, чтобы cargo
+# основного проекта (ТЗ §19.4). Собственный `[workspace]` ниже нужен, чтобы cargo
 # не пытался объединить этот крейт с корневым пакетом при поиске workspace.
 
 [package.metadata]

@@ -12,9 +12,9 @@ help: ## Показать список целей
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-## --- Обязательные проверки (ТЗ §51) -----------------------------------------
+## --- Обязательные проверки (ТЗ §21, §22, §28) --------------------------------
 
-ci: fmt-check check clippy test doc deny ## Всё, что гоняет CI
+ci: fmt-check check clippy test doc deny ## Обязательные локальные проверки
 
 fmt: ## Отформатировать код
 	$(CARGO) fmt --all
@@ -52,22 +52,22 @@ sample: ## Создать тестовый Markdown (путь в перемен�
 	@printf '# Заголовок\n\nТекст с **жирным** и *курсивом*.\n\n- пункт\n- пункт\n' > $(SAMPLE)
 	@echo "written $(SAMPLE)"
 
-size: release ## Размер release-бинарника (ТЗ §56)
+size: release ## Размер release-бинарника (ТЗ §18)
 	@ls -l $(BIN) | awk '{printf "release binary: %s bytes (%.1f MiB)\n", $$5, $$5/1048576}'
 
 ## --- Дополнительные проверки -------------------------------------------------
 
-golden-update: ## Перезаписать эталонные AST-, Typst- и PDF-файлы (ТЗ §46, §49)
+golden-update: ## Перезаписать эталонные AST-, Typst- и PDF-файлы (ТЗ §19)
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test markdown_parser
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test typst_generator
 	MDPDF_UPDATE_GOLDEN=1 $(CARGO) test --test golden_pdf pdf_structure_matches_golden_facts
 
-coverage: ## Покрытие тестами, падает ниже 90% (ТЗ §17, §29)
-	$(CARGO) llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
+coverage: ## Информационный отчёт о покрытии тестами (ТЗ §19.3)
+	$(CARGO) llvm-cov --all-features --workspace --summary-only
 
 FUZZ_TIME ?= 60
 
-fuzz: ## Fuzzing, по $(FUZZ_TIME)с на таргет (ТЗ §50, требует nightly и cargo-fuzz)
+fuzz: ## Fuzzing, по $(FUZZ_TIME)с на таргет (ТЗ §19.4, требует nightly и cargo-fuzz)
 	@if ! rustup toolchain list 2>/dev/null | grep -q '^nightly'; then \
 		echo "fuzz: нужен nightly-тулчейн, он не установлен."; \
 		echo "      поставьте: rustup toolchain install nightly"; \

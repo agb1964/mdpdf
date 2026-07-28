@@ -63,11 +63,10 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
-      # Порог ТЗ (§17, §29) — 90% строк для markdown, ast и typst_gen.
-      # cargo-llvm-cov умеет ронять сборку только по общему проценту, поэтому
-      # gate стоит на нём, а помодульные цифры видны в выводе выше.
+      # ТЗ §19.3 использует coverage как информационный показатель: единый
+      # процент не блокирует CI, важнее regression tests критических веток.
       - name: Coverage
-        run: cargo llvm-cov --all-features --workspace --summary-only --fail-under-lines 90
+        run: cargo llvm-cov --all-features --workspace --summary-only
 
   golden-pdf:
     name: эталонные PDF
@@ -77,9 +76,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      # §49 требует, чтобы минимальный набор эталонных PDF создавался в CI.
+      # ТЗ §19.5 требует, чтобы минимальный набор эталонных PDF создавался в CI.
       # Структурные проверки живут в tests/golden_pdf.rs, а сами файлы
-      # выкладываются артефактом: побайтовое сравнение по §49 не критерий,
+      # выкладываются артефактом: побайтовое сравнение не является критерием,
       # но глазами посмотреть на результат сборки должно быть можно.
       - name: Структурные проверки PDF
         run: cargo test --test golden_pdf

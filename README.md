@@ -10,7 +10,25 @@ Markdown → собственное AST → Typst source → встроенны�
 Не обращается к сети и не запускает внешние процессы. Шрифты и шаблон оформления
 встроены в бинарник.
 
+## Установка
+
+Готовые бинарники публикуются на странице
+[GitHub Releases](https://github.com/agb1964/mdpdf/releases):
+
+| Платформа | Архив |
+|---|---|
+| macOS Apple Silicon | `mdpdf-aarch64-apple-darwin.tar.gz` |
+| macOS Intel | `mdpdf-x86_64-apple-darwin.tar.gz` |
+| Linux x86-64 | `mdpdf-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 | `mdpdf-aarch64-unknown-linux-gnu.tar.gz` |
+| Windows x86-64 | `mdpdf-x86_64-pc-windows-msvc.zip` |
+
+Распакуйте архив и поместите `mdpdf` (`mdpdf.exe` на Windows) в каталог из
+`PATH`. Typst и дополнительные runtime-компоненты устанавливать не требуется.
+
 ## Сборка
+
+Для сборки из исходников нужен стабильный Rust:
 
 ```bash
 cargo build --release
@@ -85,6 +103,10 @@ Options:
 YAML front matter допускается: распознаётся и отбрасывается, метаданные из него
 не извлекаются.
 
+В бинарник встроен Noto Color Emoji. Если символ отсутствует во всех
+встроенных шрифтах, `mdpdf` выводит предупреждение в stderr и продолжает
+создание PDF; системный шрифт для подстановки не используется.
+
 Не поддерживается: HTML, JavaScript, математика, сноски, библиография,
 Mermaid/PlantUML, сетевые изображения, пользовательский Typst-код, пакеты и
 шаблоны, PDF/A, PDF/UA, подпись и шифрование PDF.
@@ -123,19 +145,27 @@ Mermaid/PlantUML, сетевые изображения, пользовател�
 
 | Файл | Содержание |
 |---|---|
+| `docs/README.md` | Карта актуальной и исторической документации |
 | `docs/mdpdf-technical-spec-v2.md` | Техническое задание, редакция 2.0 |
 | `docs/progress.md` | Журнал работ, решения, готовность к 1.0 |
+| `CONTRIBUTING.md` | Локальная разработка и проверки |
+| `docs/releasing.md` | Чек-лист выпуска |
+| `SECURITY.md` | Модель угроз и сообщение об уязвимостях |
+| `CHANGELOG.md` | Пользовательские изменения по версиям |
 | `AGENTS.md` | Инварианты для разработки |
 
 ## Статус
 
-Конвейер и локальные проверки (`make ci` на macOS ARM64) готовы. Публичный
-выпуск **1.0** и официальная поддержка Linux/Windows — после первого успешного
-прогона CI на remote-репозитории.
+Первый технический выпуск
+[`v0.1.0`](https://github.com/agb1964/mdpdf/releases/tag/v0.1.0) опубликован.
+GitHub CI подтверждён на Ubuntu, macOS и Windows; release workflow создаёт
+бинарники для пяти target. Версия **1.0** пока не объявлена.
 
 ## Лицензии
 
 Код — MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`).
 
-Встроенные шрифты Noto Sans и Noto Sans Mono — SIL Open Font License 1.1:
-`assets/fonts/OFL.txt`.
+Встроенные Noto Sans и Noto Sans Mono — SIL Open Font License 1.1
+(`assets/fonts/OFL.txt`); Noto Color Emoji — SIL Open Font License 1.1
+(`assets/fonts/LICENSE-NotoColorEmoji.txt`). Версии, контрольные суммы и
+процедура обновления перечислены в `assets/fonts/README.md`.
