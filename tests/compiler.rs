@@ -40,8 +40,11 @@ fn png() -> Vec<u8> {
 // --- шрифты (ТЗ §34) ----------------------------------------------------------
 
 #[test]
-fn all_five_fonts_are_embedded() {
-    assert_eq!(fonts::EMBEDDED_FONTS.len(), 5);
+fn all_fonts_are_embedded() {
+    // Пять начертаний Noto Sans (§34) плюс Noto Color Emoji: без него эмодзи
+    // молча пропадали из PDF, а системные шрифты запрещены §32.
+    assert_eq!(fonts::TEXT_FONTS.len(), 5);
+    assert_eq!(fonts::EMBEDDED_FONTS.len(), 6);
     for font in fonts::EMBEDDED_FONTS {
         assert!(font.len() > 1024, "embedded font looks truncated");
     }
@@ -51,6 +54,7 @@ fn all_five_fonts_are_embedded() {
 fn font_registration_order_is_deterministic() {
     assert_eq!(fonts::EMBEDDED_FONTS[0], fonts::NOTO_SANS_REGULAR);
     assert_eq!(fonts::EMBEDDED_FONTS[4], fonts::NOTO_SANS_MONO_REGULAR);
+    assert_eq!(fonts::EMBEDDED_FONTS[5], fonts::NOTO_COLOR_EMOJI);
 }
 
 // --- компиляция (ТЗ §35, §39, §41) --------------------------------------------

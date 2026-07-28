@@ -297,3 +297,39 @@ fn code_blocks_embed_the_monospace_font() {
         facts.embedded_fonts
     );
 }
+
+/// Эмодзи не покрыты ни одним начертанием Noto Sans, а системные шрифты
+/// запрещены §32 — без встроенного Noto Color Emoji они молча исчезали
+/// из PDF: код возврата 0, сообщение об успехе, пропавшее содержимое.
+///
+/// Проверка идёт по сырым байтам, а не через `PdfFacts`: цветной растровый
+/// шрифт попадает в PDF как Type3, глифы которого нарисованы встроенными
+/// изображениями. Ни `get_page_fonts`, ни `get_page_images` такой шрифт
+/// не показывают — он не значится ни обычным `BaseFont`, ни XObject страницы.
+#[test]
+fn emoji_reach_the_pdf() {
+    let with_emoji = compile_with(
+        "# Отметки\n\n🔴 срочно 🟡 позже 🟢 к запуску\n",
+        RenderOptions::default(),
+    );
+    let without_emoji = compile_with("# Отметки\n\nсрочно позже\n", RenderOptions::default());
+
+    let haystack = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
+    let with_emoji = haystack(&with_emoji);
+    let without_emoji = haystack(&without_emoji);
+
+    assert!(
+        with_emoji.contains("NotoColorEmoji"),
+        "emoji font did not reach the PDF"
+    );
+    assert!(
+        with_emoji.contains("/Type3"),
+        "colour emoji are expected as a Type3 font with bitmap glyphs"
+    );
+    // Контроль: документ без эмодзи эмодзи-шрифт не тянет, то есть проверка
+    // выше действительно реагирует на содержимое, а не на факт встраивания.
+    assert!(
+        !without_emoji.contains("NotoColorEmoji"),
+        "emoji font must not be embedded when the document has no emoji"
+    );
+}
