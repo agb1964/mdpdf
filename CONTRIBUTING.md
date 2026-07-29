@@ -42,7 +42,9 @@ rustup toolchain install nightly
 
 - `markdown` не знает о Typst, PDF и записи файлов;
 - `ast` не зависит от Markdown parser и Typst;
-- `typst_gen` знает только об AST и не читает файлы;
+- `mermaid` использует собственную модель диаграмм и не знает о Typst,
+  Markdown parser и файловой системе;
+- `typst_gen` знает только об AST и `mermaid` и не читает файлы;
 - типы `typst`, `typst-layout` и `typst-pdf` используются только в `compiler`;
 - пользовательский текст никогда не вставляется в Typst как исполняемый код;
 - production-код не использует `unsafe`, `unwrap()`, `expect()` или `panic!()`;

@@ -14,7 +14,8 @@ CLI-утилита: `Markdown → собственное AST → Typst source �
 |---|---|---|
 | `src/markdown/` | `pulldown-cmark`, `ast` | Typst, PDF, вывод в файл |
 | `src/ast/` | — | Typst, Markdown-парсер |
-| `src/typst_gen/` | `ast` | `pulldown-cmark`, файловая система, компилятор |
+| `src/mermaid/` | — (своя модель диаграмм) | Typst, `pulldown-cmark`, файловая система |
+| `src/typst_gen/` | `ast`, `mermaid` | `pulldown-cmark`, файловая система, компилятор |
 | `src/compiler/` | `typst`, `typst_pdf` | Markdown |
 
 `typst::*` и `typst_pdf::*` импортируются **только** внутри `src/compiler/`.
