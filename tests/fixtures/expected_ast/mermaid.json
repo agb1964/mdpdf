@@ -1,0 +1,137 @@
+{
+  "metadata": {
+    "title": null,
+    "author": null,
+    "language": null
+  },
+  "blocks": [
+    {
+      "value": {
+        "Heading": {
+          "level": "H1",
+          "content": [
+            {
+              "Text": "Диаграммы Mermaid"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 0,
+        "end": 29
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Flowchart"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 30,
+        "end": 43
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "graph TD\n    A[Начало] --> B{Всё ок?}\n    B -->|да| C[Продолжаем]\n    B -->|нет| D((Стоп))\n    C --> E(Конец)\n    D --> E"
+        }
+      },
+      "span": {
+        "start": 44,
+        "end": 215
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "flowchart LR\n    alpha --> beta --> gamma"
+        }
+      },
+      "span": {
+        "start": 217,
+        "end": 273
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "graph TD\n    A -->|очень длинная подпись ребра, которая не должна уезжать за пределы страницы, а переносится по ширине и резервирует себе место между узлами диаграммы| B"
+        }
+      },
+      "span": {
+        "start": 275,
+        "end": 583
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Sequence"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 585,
+        "end": 597
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "sequenceDiagram\n    participant C as Клиент\n    participant S as Сервер\n    C->>S: запрос\n    S-->C: ответ"
+        }
+      },
+      "span": {
+        "start": 598,
+        "end": 742
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Деградация до кода"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 744,
+        "end": 782
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "gantt\ntitle План работ"
+        }
+      },
+      "span": {
+        "start": 783,
+        "end": 829
+      }
+    }
+  ]
+}

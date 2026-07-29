@@ -20,13 +20,15 @@ fn generate_with(markdown: &str, options: RenderOptions) -> GeneratedTypst {
 }
 
 /// Тело без встроенного шаблона: именно оно строится из пользовательских данных.
+/// Маркер — строка `#{`, открывающая блок выражений; искать `#show:` нельзя:
+/// это слово встречается и в комментарии внутри шаблона.
 fn body_of(generated: &GeneratedTypst) -> &str {
-    let marker = "#show: mdpdf-document.with(";
+    let marker = "\n#{\n";
     let start = generated
         .source
         .find(marker)
-        .expect("generated source contains the preamble");
-    &generated.source[start..]
+        .expect("generated source contains the expression block");
+    &generated.source[start + 1..]
 }
 
 /// Диапазоны строковых литералов Typst в тексте.
@@ -89,6 +91,7 @@ fn template_defines_every_function_the_generator_calls() {
         "mdpdf-table",
         "mdpdf-image",
         "mdpdf-rule",
+        "mdpdf-diagram",
     ] {
         assert!(
             typst_gen::TEMPLATE.contains(&format!("#let {function}(")),
@@ -253,9 +256,76 @@ fn backticks_inside_code_do_not_terminate_the_block() {
     assert!(only_inside_literals(body, "```"));
 }
 
+// --- диаграммы Mermaid (ТЗ §10.5) ----------------------------------------------
+
+#[test]
+fn mermaid_flowchart_generates_a_diagram_call() {
+    let generated =
+        generate("```mermaid\ngraph TD\nA[Начало] --> B{Готово?}\nB -->|да| C[Конец]\n```\n");
+    let body = body_of(&generated);
+    assert!(body.contains("mdpdf-diagram(width: "), "{body}");
+    assert!(body.contains("\"Начало\""));
+    assert!(body.contains("\"diamond\""));
+    assert!(body.contains("\"да\""));
+    assert!(generated.warnings.is_empty());
+}
+
+#[test]
+fn mermaid_sequence_generates_a_diagram_call() {
+    let generated = generate("```mermaid\nsequenceDiagram\nA->>B: привет\nB-->A: ответ\n```\n");
+    let body = body_of(&generated);
+    assert!(body.contains("mdpdf-diagram(width: "), "{body}");
+    assert!(body.contains("\"filled-arrow\""));
+    assert!(body.contains("\"dashed\""));
+    assert!(generated.warnings.is_empty());
+}
+
+#[test]
+fn payloads_in_mermaid_labels_are_not_executable() {
+    for payload in PAYLOADS {
+        // Квадратные скобки — синтаксис узлов, убираем их из подписи.
+        let label = payload.replace(['[', ']'], "");
+        let markdown = format!("```mermaid\ngraph TD\nA[{label}] -->|{label}| B\n```\n");
+        let generated = generate(&markdown);
+        let body = body_of(&generated);
+        assert!(
+            only_inside_literals(body, label.trim_start_matches('\\')),
+            "payload escaped a literal in a mermaid label: {payload}"
+        );
+    }
+}
+
+#[test]
+fn unsupported_mermaid_diagram_falls_back_to_code_with_a_warning() {
+    let generated = generate("```mermaid\ngantt\ntitle План\n```\n");
+    let body = body_of(&generated);
+    assert!(body.contains("mdpdf-code(language: \"mermaid\""));
+    assert!(!body.contains("mdpdf-diagram"));
+    assert_eq!(generated.warnings.len(), 1);
+    assert!(
+        generated.warnings[0].contains("unsupported diagram type"),
+        "{}",
+        generated.warnings[0]
+    );
+}
+
+#[test]
+fn invalid_mermaid_falls_back_to_code_with_a_warning() {
+    let generated = generate("```mermaid\ngraph TD\na[unclosed --> b\n```\n");
+    assert_eq!(generated.warnings.len(), 1);
+    let body = body_of(&generated);
+    assert!(body.contains("mdpdf-code(language: \"mermaid\""));
+}
+
+#[test]
+fn mermaid_output_is_deterministic() {
+    let markdown = "```mermaid\ngraph TD\nA --> B\nB --> C\nC --> A\n```\n";
+    assert_eq!(generate(markdown).source, generate(markdown).source);
+}
+
 // --- golden-тесты (ТЗ §47) ----------------------------------------------------
 
-const FIXTURES: [&str; 4] = ["basic", "nesting", "table", "cyrillic"];
+const FIXTURES: [&str; 5] = ["basic", "nesting", "table", "cyrillic", "mermaid"];
 
 fn fixture_dir(kind: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))

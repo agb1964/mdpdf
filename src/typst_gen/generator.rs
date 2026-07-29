@@ -15,6 +15,9 @@ pub struct GeneratedTypst {
     pub source: String,
     /// Локальные ресурсы, которые компилятору разрешено предоставить.
     pub resources: Vec<ResourceReference>,
+    /// Нефатальные предупреждения генерации (ТЗ §10.5: деградация
+    /// mermaid-диаграммы до блока кода).
+    pub warnings: Vec<String>,
 }
 
 /// Ссылка на локальный ресурс (ТЗ §19, §24.6).
@@ -63,6 +66,16 @@ impl PaperSize {
         match self {
             Self::A4 => 210.0,
             Self::Letter => 8.5 * 25.4,
+        }
+    }
+
+    /// Большая сторона страницы в миллиметрах — нужна для бюджета высоты
+    /// диаграмм (ТЗ §10.5).
+    #[must_use]
+    pub fn longer_side_mm(self) -> f64 {
+        match self {
+            Self::A4 => 297.0,
+            Self::Letter => 11.0 * 25.4,
         }
     }
 }
@@ -317,6 +330,7 @@ impl TypstGenerator {
 
         let mut writer = TypstWriter::new();
         let mut resources = Vec::new();
+        let mut warnings = Vec::new();
 
         writer.push_raw(TEMPLATE.trim_end());
         writer.blank_line();
@@ -324,12 +338,21 @@ impl TypstGenerator {
         writer.blank_line();
 
         writer.line("#{");
-        writer.indented(|writer| blocks::write_blocks(writer, &document.blocks, &mut resources))?;
+        writer.indented(|writer| {
+            blocks::write_blocks(
+                writer,
+                &document.blocks,
+                &mut resources,
+                &self.options,
+                &mut warnings,
+            )
+        })?;
         writer.line("}");
 
         Ok(GeneratedTypst {
             source: writer.finish(),
             resources,
+            warnings,
         })
     }
 

@@ -56,6 +56,12 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
 
     let generated = TypstGenerator::new(config.render_options()?).generate(&ast)?;
 
+    // Нефатальные предупреждения генерации (деградировавшие mermaid-диаграммы,
+    // ТЗ §10.5) не теряются; PDF всё равно создаётся.
+    for warning in &generated.warnings {
+        eprintln!("{}: warning: {warning}", document.name);
+    }
+
     if config.verbose {
         eprintln!(
             "mdpdf: generated {} bytes of Typst, {} local resources",

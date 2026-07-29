@@ -23,6 +23,7 @@ pub mod compiler;
 pub mod config;
 pub mod error;
 pub mod markdown;
+pub mod mermaid;
 pub mod output;
 pub mod source;
 pub mod typst_gen;

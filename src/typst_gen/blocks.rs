@@ -7,9 +7,10 @@ use crate::ast::Spanned;
 use crate::ast::block::{
     Alignment, Block, CodeBlock, Heading, List, ListItem, ListKind, Table, TableRow,
 };
+use crate::typst_gen::diagram::diagram_expression;
 use crate::typst_gen::error::TypstGenerationError;
 use crate::typst_gen::escape::string_literal;
-use crate::typst_gen::generator::ResourceReference;
+use crate::typst_gen::generator::{RenderOptions, ResourceReference};
 use crate::typst_gen::inlines::{EMPTY_CONTENT, inline_expression};
 use crate::typst_gen::writer::TypstWriter;
 
@@ -23,12 +24,14 @@ pub fn write_blocks(
     writer: &mut TypstWriter,
     blocks: &[Spanned<Block>],
     resources: &mut Vec<ResourceReference>,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
 ) -> Result<(), TypstGenerationError> {
     for (index, block) in blocks.iter().enumerate() {
         if index > 0 {
             writer.blank_line();
         }
-        let expression = block_expression(block, resources)?;
+        let expression = block_expression(block, resources, options, warnings)?;
         writer.line(&expression);
     }
     Ok(())
@@ -42,20 +45,22 @@ pub fn write_blocks(
 pub fn block_expression(
     block: &Spanned<Block>,
     resources: &mut Vec<ResourceReference>,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
 ) -> Result<String, TypstGenerationError> {
     let expression = match &block.value {
         Block::Heading(heading) => heading_expression(heading, resources)?,
         Block::Paragraph(paragraph) => {
             format!("par({})", inline_expression(&paragraph.content, resources)?)
         }
-        Block::CodeBlock(code) => code_expression(code),
+        Block::CodeBlock(code) => code_expression(code, options, warnings),
         Block::Quote(quote) => {
             format!(
                 "mdpdf-quote({})",
-                blocks_expression(&quote.blocks, resources)?
+                blocks_expression(&quote.blocks, resources, options, warnings)?
             )
         }
-        Block::List(list) => list_expression(list, resources)?,
+        Block::List(list) => list_expression(list, resources, options, warnings)?,
         Block::Table(table) => table_expression(table, resources)?,
         Block::ThematicBreak => "mdpdf-rule()".to_owned(),
     };
@@ -66,13 +71,15 @@ pub fn block_expression(
 fn blocks_expression(
     blocks: &[Spanned<Block>],
     resources: &mut Vec<ResourceReference>,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
 ) -> Result<String, TypstGenerationError> {
     if blocks.is_empty() {
         return Ok(EMPTY_CONTENT.to_owned());
     }
     let mut parts = Vec::with_capacity(blocks.len());
     for block in blocks {
-        parts.push(block_expression(block, resources)?);
+        parts.push(block_expression(block, resources, options, warnings)?);
     }
     Ok(parts.join(" + "))
 }
@@ -91,7 +98,23 @@ fn heading_expression(
 
 /// Блок кода (ТЗ §24.7). Код передаётся строковым значением, а не raw-разметкой
 /// с подбором количества обратных кавычек (ТЗ §23.3).
-fn code_expression(code: &CodeBlock) -> String {
+///
+/// Блок с языком `mermaid` рендерится диаграммой (ТЗ §10.5); диаграмма вне
+/// подмножества или с синтаксической ошибкой деградирует до обычного кода
+/// с предупреждением, сборка не рвётся.
+fn code_expression(
+    code: &CodeBlock,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
+) -> String {
+    if code.language.as_deref() == Some("mermaid") {
+        match diagram_expression(code, options) {
+            Ok(expression) => return expression,
+            Err(error) => warnings.push(format!(
+                "mermaid diagram is not rendered ({error}); the block is shown as code"
+            )),
+        }
+    }
     let language = code
         .language
         .as_deref()
@@ -107,10 +130,12 @@ fn code_expression(code: &CodeBlock) -> String {
 fn list_expression(
     list: &List,
     resources: &mut Vec<ResourceReference>,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
 ) -> Result<String, TypstGenerationError> {
     let mut items = Vec::with_capacity(list.items.len());
     for item in &list.items {
-        items.push(list_item_expression(item, resources)?);
+        items.push(list_item_expression(item, resources, options, warnings)?);
     }
     // Одноэлементный кортеж Typst требует завершающей запятой.
     let joined = if items.len() == 1 {
@@ -131,8 +156,10 @@ fn list_expression(
 fn list_item_expression(
     item: &ListItem,
     resources: &mut Vec<ResourceReference>,
+    options: &RenderOptions,
+    warnings: &mut Vec<String>,
 ) -> Result<String, TypstGenerationError> {
-    let body = blocks_expression(&item.blocks, resources)?;
+    let body = blocks_expression(&item.blocks, resources, options, warnings)?;
     let checked = match item.checked {
         None => "none".to_owned(),
         Some(true) => "true".to_owned(),
@@ -185,7 +212,7 @@ const fn alignment_name(alignment: &Alignment) -> &'static str {
 }
 
 /// Кортеж Typst со стабильной формой: одноэлементный получает запятую.
-fn tuple(items: &[&str]) -> String {
+pub(crate) fn tuple(items: &[&str]) -> String {
     match items {
         [] => "()".to_owned(),
         [single] => format!("({single},)"),
@@ -206,7 +233,14 @@ mod tests {
 
     fn generate(block: Block) -> String {
         let mut resources = Vec::new();
-        block_expression(&spanned(block), &mut resources).expect("block generates")
+        let mut warnings = Vec::new();
+        block_expression(
+            &spanned(block),
+            &mut resources,
+            &RenderOptions::default(),
+            &mut warnings,
+        )
+        .expect("block generates")
     }
 
     #[test]
@@ -319,8 +353,16 @@ mod tests {
     fn blocks_are_separated_by_one_blank_line() {
         let mut writer = TypstWriter::new();
         let mut resources = Vec::new();
+        let mut warnings = Vec::new();
         let blocks = vec![spanned(Block::ThematicBreak), spanned(Block::ThematicBreak)];
-        write_blocks(&mut writer, &blocks, &mut resources).expect("writes");
+        write_blocks(
+            &mut writer,
+            &blocks,
+            &mut resources,
+            &RenderOptions::default(),
+            &mut warnings,
+        )
+        .expect("writes");
         assert_eq!(writer.finish(), "mdpdf-rule()\n\nmdpdf-rule()\n");
     }
 }

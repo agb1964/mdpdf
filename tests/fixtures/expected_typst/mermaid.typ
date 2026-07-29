@@ -261,7 +261,21 @@
 )
 
 #{
-  mdpdf-table(columns: 3, alignments: (left, center, right), header: (text("Лево"), text("Центр"), text("Право")), rows: ((text("раз"), text("два"), text("три")), (text("a"), [], [])))
+  heading(level: 1, text("Диаграммы Mermaid"))
 
-  mdpdf-code(language: "rust", body: "fn main() {\n    println!(\"привет\");\n}")
+  heading(level: 2, text("Flowchart"))
+
+  mdpdf-diagram(width: 161.12pt, height: 230.17pt, fit: 100%, boxes: ((52.76pt, 0pt, 55.6pt, 24.3pt, "Начало", "rect"), (30.8pt, 54.3pt, 99.52pt, 36.45pt, "Всё ок?", "diamond"), (0pt, 120.75pt, 82pt, 24.3pt, "Продолжаем", "rect"), (106pt, 120.75pt, 55.12pt, 55.12pt, "Стоп", "circle"), (56.06pt, 205.87pt, 49pt, 24.3pt, "Конец", "rounded")), lines: ((80.56pt, 24.3pt, 80.56pt, 54.3pt, "arrow"), (68.62pt, 90.75pt, 48.96pt, 120.75pt, "arrow"), (93.31pt, 90.75pt, 114.29pt, 120.75pt, "arrow"), (46.65pt, 145.05pt, 74.91pt, 205.87pt, "arrow"), (112.61pt, 175.87pt, 89.8pt, 205.87pt, "arrow")), labels: ((54.17pt, 100.75pt, 9.24pt, "да"), (96.87pt, 100.75pt, 13.86pt, "нет")))
+
+  mdpdf-diagram(width: 200.4pt, height: 24.3pt, fit: 100%, boxes: ((0pt, 0pt, 49pt, 24.3pt, "alpha", "rect"), (79pt, 0pt, 42.4pt, 24.3pt, "beta", "rect"), (151.4pt, 0pt, 49pt, 24.3pt, "gamma", "rect")), lines: ((49pt, 12.15pt, 79pt, 12.15pt, "arrow"), (121.4pt, 12.15pt, 151.4pt, 12.15pt, "arrow")), labels: ())
+
+  mdpdf-diagram(width: 183pt, height: 99.64pt, fit: 100%, boxes: ((80.2pt, 0pt, 22.6pt, 24.3pt, "A", "rect"), (80.2pt, 75.34pt, 22.6pt, 24.3pt, "B", "rect")), lines: ((91.5pt, 24.3pt, 91.5pt, 75.34pt, "arrow"),), labels: ((1.5pt, 29.8pt, 180pt, "очень длинная подпись ребра, которая не должна уезжать за пределы страницы, а переносится по ширине и резервирует себе место между узлами диаграммы"),))
+
+  heading(level: 2, text("Sequence"))
+
+  mdpdf-diagram(width: 151.2pt, height: 106.9pt, fit: 100%, boxes: ((0pt, 0pt, 55.6pt, 24.3pt, "Клиент", "rect"), (95.6pt, 0pt, 55.6pt, 24.3pt, "Сервер", "rect")), lines: ((27.8pt, 50.45pt, 123.4pt, 50.45pt, "filled-arrow"), (123.4pt, 82.75pt, 27.8pt, 82.75pt, "dashed-arrow"), (27.8pt, 24.3pt, 27.8pt, 106.9pt, "dashed"), (123.4pt, 24.3pt, 123.4pt, 106.9pt, "dashed")), labels: ((61.74pt, 45.44pt, 27.72pt, "запрос"), (64.05pt, 77.75pt, 23.1pt, "ответ")))
+
+  heading(level: 2, text("Деградация до кода"))
+
+  mdpdf-code(language: "mermaid", body: "gantt\ntitle План работ")
 }

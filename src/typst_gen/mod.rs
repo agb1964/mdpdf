@@ -4,6 +4,7 @@
 //! не зависит от `pulldown-cmark` и не изменяет AST. Вывод детерминирован (ТЗ §25).
 
 pub mod blocks;
+pub mod diagram;
 pub mod error;
 pub mod escape;
 pub mod generator;

@@ -399,7 +399,7 @@ mod golden {
 
     /// Каждому `tests/fixtures/markdown/<name>.md` соответствует
     /// `tests/fixtures/expected_ast/<name>.json`.
-    const FIXTURES: [&str; 4] = ["basic", "nesting", "table", "cyrillic"];
+    const FIXTURES: [&str; 5] = ["basic", "nesting", "table", "cyrillic", "mermaid"];
 
     /// Обновление golden-файлов выполняется явной командой, а не автоматически
     /// при обычном прогоне тестов (ТЗ §46): `make golden-update`.

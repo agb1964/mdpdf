@@ -26,7 +26,7 @@ use mdpdf::compiler::{CompileInput, EmbeddedTypstCompiler, PdfCompiler};
 use mdpdf::markdown::parser::MarkdownParser;
 use mdpdf::typst_gen::generator::{RenderOptions, TypstGenerator};
 
-const FIXTURES: &[&str] = &["basic", "nesting", "table", "cyrillic"];
+const FIXTURES: &[&str] = &["basic", "nesting", "table", "cyrillic", "mermaid"];
 
 /// Структурные факты о PDF, допустимые критерием ТЗ §49: число страниц,
 /// размеры страниц, множество встроенных шрифтов, число встроенных изображений.

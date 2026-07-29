@@ -39,6 +39,13 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "fuzz_mermaid_parser"
+path = "fuzz_targets/fuzz_mermaid_parser.rs"
+test = false
+doc = false
+bench = false
+
 [profile.release]
 debug = 1
 
