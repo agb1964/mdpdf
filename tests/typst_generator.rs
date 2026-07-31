@@ -265,60 +265,129 @@ fn mermaid_flowchart_generates_a_diagram_call() {
     let generated =
         generate("```mermaid\ngraph TD\nA[Начало] --> B{Готово?}\nB -->|да| C[Конец]\n```\n");
     let body = body_of(&generated);
-    assert!(body.contains("mdpdf-diagram(width: "), "{body}");
-    assert!(body.contains("\"Начало\""));
-    assert!(body.contains("\"diamond\""));
-    assert!(body.contains("\"да\""));
+    assert!(
+        body.contains("mdpdf-diagram(path: \"/mdpdf-resources/mermaid-000001.svg\""),
+        "{body}"
+    );
+    assert!(body.contains("alt: \"Mermaid diagram\""), "{body}");
     assert!(generated.warnings.is_empty());
+    assert_eq!(generated.resources.len(), 1);
 }
 
 #[test]
 fn mermaid_sequence_generates_a_diagram_call() {
     let generated = generate("```mermaid\nsequenceDiagram\nA->>B: привет\nB-->A: ответ\n```\n");
     let body = body_of(&generated);
-    assert!(body.contains("mdpdf-diagram(width: "), "{body}");
-    assert!(body.contains("\"filled-arrow\""));
-    assert!(body.contains("\"dashed\""));
+    assert!(body.contains("mdpdf-diagram(path: "), "{body}");
     assert!(generated.warnings.is_empty());
+    assert_eq!(generated.resources.len(), 1);
 }
 
+/// Подписи диаграммы живут только внутри байтов SVG, поэтому в Typst source
+/// пользовательский текст не попадает **вообще** — проверка строже прежней,
+/// где payload допускался внутри строкового литерала.
 #[test]
-fn payloads_in_mermaid_labels_are_not_executable() {
+fn payloads_in_mermaid_labels_never_reach_the_typst_source() {
     for payload in PAYLOADS {
-        // Квадратные скобки — синтаксис узлов `id[…]`; форма `id["…"]` ещё
-        // и снимает обрамляющие кавычки как синтаксис Mermaid. Проверяем
-        // через `id(…)` и подпись ребра, где payload остаётся текстом.
-        let label = payload.replace(['[', ']', '(', ')'], "");
-        let markdown = format!("```mermaid\ngraph TD\nA({label}) -->|{label}| B\n```\n");
+        let label = payload.replace(['[', ']', '(', ')', '|', '"'], "");
+        if label.trim().is_empty() {
+            continue;
+        }
+        let markdown = format!("```mermaid\ngraph TD\nA({label}) --> B\n```\n");
         let generated = generate(&markdown);
         let body = body_of(&generated);
-        assert!(
-            only_inside_literals(body, label.trim_start_matches('\\')),
-            "payload escaped a literal in a mermaid label: {payload}"
-        );
+        // Диаграмма могла и деградировать до кода — тогда payload обязан
+        // остаться внутри строкового литерала, как у любого блока кода.
+        if body.contains("mdpdf-diagram(path: ") {
+            assert!(
+                !body.contains(label.trim_start_matches('\\')),
+                "подпись утекла в Typst source: {payload}"
+            );
+        } else {
+            assert!(
+                only_inside_literals(body, label.trim_start_matches('\\')),
+                "payload escaped a literal in a fallback code block: {payload}"
+            );
+        }
     }
 }
 
 #[test]
 fn unsupported_mermaid_diagram_falls_back_to_code_with_a_warning() {
-    let generated = generate("```mermaid\ngantt\ntitle План\n```\n");
+    let generated = generate("```mermaid\ntotallyNotADiagram\nA --> B\n```\n");
     let body = body_of(&generated);
     assert!(body.contains("mdpdf-code(language: \"mermaid\""));
     assert!(!body.contains("mdpdf-diagram"));
     assert_eq!(generated.warnings.len(), 1);
     assert!(
-        generated.warnings[0].contains("unsupported diagram type"),
+        generated.warnings[0].contains("mermaid diagram is not rendered"),
         "{}",
         generated.warnings[0]
     );
+    assert!(
+        generated.resources.is_empty(),
+        "неудавшаяся диаграмма зарегистрировала ресурс"
+    );
 }
 
+/// `click` с внешним URL даёт в SVG `href`, что запрещено политикой
+/// ресурсов (ТЗ §33.3) — диаграмма деградирует, но сборка продолжается.
 #[test]
-fn invalid_mermaid_falls_back_to_code_with_a_warning() {
-    let generated = generate("```mermaid\ngraph TD\na[unclosed --> b\n```\n");
-    assert_eq!(generated.warnings.len(), 1);
+fn a_diagram_with_an_external_link_falls_back_to_code_with_a_warning() {
+    let generated = generate(
+        "```mermaid\nflowchart TD\nA[Ссылка] --> B[Конец]\nclick A \"https://example.com\"\n```\n",
+    );
     let body = body_of(&generated);
-    assert!(body.contains("mdpdf-code(language: \"mermaid\""));
+    assert!(body.contains("mdpdf-code(language: \"mermaid\""), "{body}");
+    assert_eq!(generated.warnings.len(), 1);
+    assert!(
+        generated.warnings[0].contains("external resource"),
+        "{}",
+        generated.warnings[0]
+    );
+    assert!(generated.resources.is_empty());
+}
+
+/// Пустой блок — единственный вход, который рендерер отвергает
+/// безоговорочно: заголовок диаграммы отсутствует.
+#[test]
+fn an_empty_mermaid_block_falls_back_to_code_with_a_warning() {
+    let generated = generate("```mermaid\n```\n");
+    assert_eq!(generated.warnings.len(), 1, "{:?}", generated.warnings);
+    let body = body_of(&generated);
+    assert!(body.contains("mdpdf-code(language: \"mermaid\""), "{body}");
+}
+
+/// `mermaid-rs-renderer` заметно терпимее прежнего собственного парсера:
+/// незакрытая скобка или нераспознанная стрелка не считаются ошибкой,
+/// диаграмма всё равно рисуется. Тест фиксирует это как поведение, а не
+/// как дефект: контракт §10.5.5 требует лишь «не рвать сборку».
+#[test]
+fn a_malformed_diagram_is_rendered_best_effort_without_a_warning() {
+    let generated = generate("```mermaid\ngraph TD\na[unclosed --> b\n```\n");
+    assert!(generated.warnings.is_empty(), "{:?}", generated.warnings);
+    assert!(body_of(&generated).contains("mdpdf-diagram(path: "));
+}
+
+/// Диаграммы и картинки из Markdown делят один счётчик ресурсов
+/// в порядке обхода документа.
+#[test]
+fn diagrams_and_images_share_one_resource_counter() {
+    let generated =
+        generate("![первая](a.png)\n\n```mermaid\ngraph TD\nA --> B\n```\n\n![вторая](b.jpg)\n");
+    let paths: Vec<&str> = generated
+        .resources
+        .iter()
+        .map(|resource| resource.logical_path.as_str())
+        .collect();
+    assert_eq!(
+        paths,
+        vec![
+            "/mdpdf-resources/000001.png",
+            "/mdpdf-resources/mermaid-000002.svg",
+            "/mdpdf-resources/000003.jpg",
+        ]
+    );
 }
 
 #[test]

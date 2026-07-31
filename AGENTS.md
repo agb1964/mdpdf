@@ -14,7 +14,8 @@ CLI-утилита: `Markdown → собственное AST → Typst source �
 |---|---|---|
 | `src/markdown/` | `pulldown-cmark`, `ast` | Typst, PDF, вывод в файл |
 | `src/ast/` | — | Typst, Markdown-парсер |
-| `src/mermaid/` | интеграция mmdr / legacy layout на время миграции (ТЗ §10.5) | `pulldown-cmark`, файловая система, сеть, JS |
+| `src/mermaid/` | обёртка над `mermaid-rs-renderer`, лимиты, ошибки (ТЗ §10.5) | `pulldown-cmark`, файловая система, сеть, JS, Typst |
+| `src/svg.rs` | байты SVG | Typst, Markdown, файловая система |
 | `src/typst_gen/` | `ast`, mermaid→SVG resource | `pulldown-cmark`, компилятор |
 | `src/compiler/` | `typst`, `typst_pdf` | Markdown |
 
@@ -58,7 +59,11 @@ cargo deny check
 ## Версии зависимостей
 
 `typst` и `typst-pdf` закреплены точной равной версией одной линии (`=0.15.1`),
-`pulldown-cmark` — `=0.13.4`. `Cargo.lock` хранится в Git. Обновление Typst —
+`pulldown-cmark` — `=0.13.4`, `mermaid-rs-renderer` — `=0.3.1` с
+`default-features = false`. `Cargo.lock` хранится в Git.
+
+Пин mermaid-движка точный по той же причине, что и у Typst: он вычисляет
+геометрию, которая попадает в эталонные файлы. Обновление любого из трёх —
 отдельной задачей с полным test suite и сравнением golden PDF.
 
 ## Статус

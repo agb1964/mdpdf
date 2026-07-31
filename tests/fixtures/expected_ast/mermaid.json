@@ -164,14 +164,60 @@
     },
     {
       "value": {
-        "CodeBlock": {
-          "language": "mermaid",
-          "code": "gantt\ntitle План работ"
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "Нераспознанный тип диаграммы."
+            }
+          ]
         }
       },
       "span": {
         "start": 1262,
-        "end": 1308
+        "end": 1318
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "totallyNotADiagram\nA --> B"
+        }
+      },
+      "span": {
+        "start": 1319,
+        "end": 1360
+      }
+    },
+    {
+      "value": {
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "Внешняя ссылка в выходном SVG запрещена политикой ресурсов (ТЗ §33.3),"
+            },
+            "SoftBreak",
+            {
+              "Text": "поэтому такая диаграмма тоже деградирует до кода."
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 1362,
+        "end": 1576
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "flowchart TD\n    A[Ссылка] --> B[Конец]\n    click A \"https://example.com\""
+        }
+      },
+      "span": {
+        "start": 1577,
+        "end": 1676
       }
     }
   ]

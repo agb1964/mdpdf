@@ -120,7 +120,7 @@ fuzz: ## Fuzzing, по $(FUZZ_TIME)с на таргет (ТЗ §19.4, требу
 		echo "      поставьте: cargo install cargo-fuzz"; \
 		exit 1; \
 	fi
-	@for target in fuzz_markdown_parser fuzz_typst_escape fuzz_ast_validation fuzz_mermaid_parser; do \
+	@for target in fuzz_markdown_parser fuzz_typst_escape fuzz_ast_validation fuzz_mermaid_render; do \
 		echo "== $$target: $(FUZZ_TIME)с =="; \
 		( cd fuzz && cargo +nightly fuzz run $$target -- -max_total_time=$(FUZZ_TIME) ) || exit 1; \
 	done

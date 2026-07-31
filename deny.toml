@@ -5,7 +5,7 @@
 #   mermaid source → SVG → виртуальный ресурс → Typst `#image` / `mdpdf-image`.
 #   Запрещены: Node.js, mermaid-cli, Puppeteer/Chromium, встраивание JS-движков
 #   (V8/QuickJS/Boa) для прогона Mermaid.js, git-зависимости mermaid (см. [sources]).
-#   Feature `cli` / `png` / `benchmark` у mermaid-rs-renderer запрещены —
+#   Feature `cli` / `png` у mermaid-rs-renderer запрещены —
 #   растеризация и CLI не нужны; PNG/resvg для диаграмм не подключать.
 
 [graph]
