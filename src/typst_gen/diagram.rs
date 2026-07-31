@@ -48,12 +48,7 @@ pub fn diagram_expression(
 ) -> Result<String, DiagramError> {
     let rendered = mermaid::render(&code.code).map_err(DiagramError::Mermaid)?;
 
-    let width = fit_width(
-        rendered.width_px,
-        rendered.height_px,
-        text_width_pt(options),
-        text_height_pt(options),
-    );
+    let placement = choose_placement(rendered.width_px, rendered.height_px, options);
 
     let logical_path = next_logical_path(resources, "mermaid-", "svg");
     let path = path_literal(&logical_path).map_err(|error| {
@@ -67,10 +62,95 @@ pub fn diagram_expression(
     register(rendered, logical_path, span, resources);
 
     Ok(format!(
-        "mdpdf-diagram(path: {path}, alt: {}, width: {})",
+        "{}(path: {path}, alt: {}, width: {})",
+        placement.function(),
         string_literal(DIAGRAM_ALT),
-        pt(width)
+        pt(placement.width())
     ))
+}
+
+/// Как диаграмма ставится на страницу.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Placement {
+    /// В основном потоке книжной страницы.
+    Portrait {
+        /// Ширина в пунктах.
+        width: f64,
+    },
+    /// На отдельной альбомной странице: в книжной ориентации диаграмма
+    /// ужалась бы до нечитаемого кегля.
+    Landscape {
+        /// Ширина в пунктах, посчитанная под альбомную полосу набора.
+        width: f64,
+    },
+}
+
+impl Placement {
+    /// Имя функции шаблона.
+    #[must_use]
+    pub const fn function(self) -> &'static str {
+        match self {
+            Self::Portrait { .. } => "mdpdf-diagram",
+            Self::Landscape { .. } => "mdpdf-diagram-landscape",
+        }
+    }
+
+    /// Ширина в пунктах.
+    #[must_use]
+    pub const fn width(self) -> f64 {
+        match self {
+            Self::Portrait { width } | Self::Landscape { width } => width,
+        }
+    }
+}
+
+/// Базовый кегль подписей внутри SVG, в px.
+///
+/// `mermaid-rs-renderer` рисует подписи 14 px и не даёт это настроить;
+/// после вписывания в страницу кегль умножается на масштаб.
+const DIAGRAM_FONT_PX: f64 = 14.0;
+
+/// Кегль, ниже которого подписи диаграммы перестают читаться на печати.
+const MIN_READABLE_PT: f64 = 8.0;
+
+/// Насколько альбомная ориентация должна выигрывать, чтобы ради неё рвать
+/// страницу. Меньший выигрыш того не стоит.
+const LANDSCAPE_GAIN: f64 = 1.15;
+
+/// Выбирает ориентацию страницы для диаграммы.
+///
+/// Широкая диаграмма (например, десяток модулей в один ряд) в книжной
+/// полосе набора ужимается до нечитаемого кегля: 1556 px по ширине дают
+/// 31 % и 4.3 pt на подписи. Если в альбомной ориентации диаграмма
+/// получается заметно крупнее и это выводит её из-под порога читаемости,
+/// она ставится на отдельную альбомную страницу.
+fn choose_placement(width_px: f64, height_px: f64, options: &RenderOptions) -> Placement {
+    let portrait = fit_width(
+        width_px,
+        height_px,
+        text_width_pt(options),
+        text_height_pt(options),
+    );
+
+    if width_px <= 0.0 || !width_px.is_finite() {
+        return Placement::Portrait { width: portrait };
+    }
+    // Кегль читаем — рвать страницу незачем.
+    if DIAGRAM_FONT_PX * (portrait / width_px) >= MIN_READABLE_PT {
+        return Placement::Portrait { width: portrait };
+    }
+
+    let landscape = fit_width(
+        width_px,
+        height_px,
+        landscape_width_pt(options),
+        landscape_height_pt(options),
+    );
+    if landscape > portrait * LANDSCAPE_GAIN {
+        Placement::Landscape { width: landscape }
+    } else {
+        Placement::Portrait { width: portrait }
+    }
 }
 
 /// Кладёт байты SVG в список ресурсов документа.
@@ -104,6 +184,21 @@ fn text_width_pt(options: &RenderOptions) -> f64 {
 fn text_height_pt(options: &RenderOptions) -> f64 {
     let height_mm = options.paper.longer_side_mm() - 2.0 * options.margin.as_mm();
     (height_mm.max(0.0) * 72.0 / 25.4 - 1.6 * options.font_size.as_pt() - 4.0).max(0.0)
+}
+
+/// Ширина полосы набора на альбомной странице: стороны меняются местами.
+fn landscape_width_pt(options: &RenderOptions) -> f64 {
+    let width_mm = options.paper.longer_side_mm() - 2.0 * options.margin.as_mm();
+    width_mm.max(0.0) * 72.0 / 25.4
+}
+
+/// Высота полосы набора на альбомной странице.
+///
+/// Диаграмма занимает страницу целиком, без основного текста вокруг,
+/// поэтому вычитаются только поля — запас под отступы блока не нужен.
+fn landscape_height_pt(options: &RenderOptions) -> f64 {
+    let height_mm = options.paper.shorter_side_mm() - 2.0 * options.margin.as_mm();
+    height_mm.max(0.0) * 72.0 / 25.4
 }
 
 /// Ширина, с которой диаграмма ставится на страницу.
@@ -275,6 +370,68 @@ mod tests {
             ..RenderOptions::default()
         };
         assert!(text_width_pt(&letter) > text_width_pt(&RenderOptions::default()));
+    }
+
+    #[test]
+    fn a_narrow_diagram_stays_in_the_portrait_flow() {
+        let placement = choose_placement(400.0, 300.0, &options());
+        assert!(
+            matches!(placement, Placement::Portrait { .. }),
+            "{placement:?}"
+        );
+        assert_eq!(placement.function(), "mdpdf-diagram");
+    }
+
+    /// Диаграмма из реального документа: девять модулей в один ряд,
+    /// 1556×465 px. В книжной полосе набора это 31 % и 4.3 pt на подписи.
+    #[test]
+    fn a_very_wide_diagram_moves_to_a_landscape_page() {
+        let placement = choose_placement(1556.0, 465.0, &options());
+        assert!(
+            matches!(placement, Placement::Landscape { .. }),
+            "{placement:?}"
+        );
+        assert_eq!(placement.function(), "mdpdf-diagram-landscape");
+        assert!(
+            placement.width() > 481.0,
+            "альбомная ширина не больше книжной: {}",
+            placement.width()
+        );
+    }
+
+    /// Порог именно по читаемости: диаграмма, которая ужимается, но
+    /// остаётся читаемой, страницу не рвёт.
+    #[test]
+    fn a_moderately_wide_diagram_is_not_worth_a_page_break() {
+        // 700 px → ~69 % → ~9.6 pt: мельче оригинала, но читаемо.
+        let placement = choose_placement(700.0, 400.0, &options());
+        assert!(
+            matches!(placement, Placement::Portrait { .. }),
+            "{placement:?}"
+        );
+    }
+
+    /// Очень высокая диаграмма в альбомной ориентации только проиграет:
+    /// бюджет высоты там меньше. Ориентация меняться не должна.
+    #[test]
+    fn a_tall_diagram_stays_portrait_even_when_scaled_down() {
+        let placement = choose_placement(300.0, 4000.0, &options());
+        assert!(
+            matches!(placement, Placement::Portrait { .. }),
+            "{placement:?}"
+        );
+    }
+
+    #[test]
+    fn degenerate_dimensions_do_not_trigger_a_page_break() {
+        assert!(matches!(
+            choose_placement(0.0, 0.0, &options()),
+            Placement::Portrait { .. }
+        ));
+        assert!(matches!(
+            choose_placement(f64::NAN, 10.0, &options()),
+            Placement::Portrait { .. }
+        ));
     }
 
     #[test]

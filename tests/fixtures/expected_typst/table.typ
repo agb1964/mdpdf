@@ -168,6 +168,17 @@
   align(center, image(path, alt: alt, width: width)),
 )
 
+// Широкая диаграмма на отдельной альбомной странице (ТЗ §10.5).
+// Решение принимает генератор: в книжной ориентации такая диаграмма
+// ужалась бы до нечитаемого кегля. Ширина снова приходит готовой —
+// она посчитана уже под альбомную полосу набора.
+// `page` со своими параметрами действует только на переданное содержимое,
+// последующий текст возвращается к книжной ориентации.
+#let mdpdf-diagram-landscape(path: "", alt: none, width: 0pt) = page(
+  flipped: true,
+  align(center + horizon, image(path, alt: alt, width: width)),
+)
+
 #show: mdpdf-document.with(
   paper: "a4",
   margin: 20mm,

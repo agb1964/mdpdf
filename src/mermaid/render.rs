@@ -5,7 +5,8 @@
 //! JavaScript, Chromium и внешние процессы не используются (ТЗ §2).
 
 use mermaid_rs_renderer::{
-    LayoutConfig, Theme, compute_layout, measure_svg_dimensions, parse_mermaid_strict, render_svg,
+    DiagramKind, Layout, LayoutConfig, Theme, compute_layout, measure_svg_dimensions,
+    parse_mermaid_strict, render_svg,
 };
 
 use crate::mermaid::error::MermaidError;
@@ -97,7 +98,8 @@ fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
     let parsed = parse_mermaid_strict(source).map_err(|error| MermaidError::Render {
         message: error.to_string(),
     })?;
-    let layout = compute_layout(&parsed.graph, &theme, &layout_config);
+    let mut layout = compute_layout(&parsed.graph, &theme, &layout_config);
+    drop_sequence_label_anchors(&mut layout);
     let dimensions = measure_svg_dimensions(&layout, &layout_config, None);
     let svg = pin_font_family(render_svg(&layout, &theme, &layout_config));
 
@@ -106,6 +108,36 @@ fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
         width_px: f64::from(dimensions.width),
         height_px: f64::from(dimensions.height),
     })
+}
+
+/// Снимает у сообщений sequence-диаграммы позицию подписи, вычисленную
+/// оптимизатором рендерера.
+///
+/// `mermaid-rs-renderer` 0.3.1 подбирает `label_anchor` минимизацией штрафов
+/// (`sequence_label_penalty`): за пересечение с занятой областью штраф
+/// 10 000+, а за удаление от собственной стрелки — квадратичный, но заметно
+/// меньший. На разреженной диаграмме результат приемлем, но на плотной
+/// (самосообщения, `alt`, многострочные подписи) подписи разъезжаются:
+/// в регрессионном тесте блок подписи заходит на собственную стрелку на
+/// 26 px, а визуально подписи читаются как относящиеся к соседним
+/// сообщениям.
+///
+/// Без якоря рендерер применяет собственную геометрическую формулу
+/// «блок подписи стоит на небольшом зазоре над линией сообщения» — ровно то
+/// поведение, которого ждут от sequence-диаграммы. Поэтому здесь якорь
+/// снимается, а не пересчитывается: своей арифметики мы не добавляем.
+///
+/// Для остальных типов диаграмм якорь сохраняется: там формула по умолчанию
+/// привязана к первой точке ребра, а не к середине, и снятие якоря сделало бы
+/// хуже. Дефект раскладки подписей flowchart (наложение подписи на узел)
+/// этим не лечится — он остаётся известным ограничением.
+fn drop_sequence_label_anchors(layout: &mut Layout) {
+    if layout.kind != DiagramKind::Sequence {
+        return;
+    }
+    for edge in &mut layout.edges {
+        edge.label_anchor = None;
+    }
 }
 
 /// Заменяет служебное семейство на встроенный шрифт.
@@ -127,6 +159,26 @@ mod tests {
     use super::*;
 
     const FLOWCHART: &str = "flowchart TD\n    A[Начало] --> B[Конец]\n";
+
+    /// Плотная sequence-диаграмма: самосообщение, alt-блок и многострочные
+    /// подписи. Именно на такой раскладке оптимизатор рендерера промахивается.
+    const SEQUENCE_DENSE: &str = "sequenceDiagram\n\
+         \x20   participant C as Клиент\n\
+         \x20   participant B as BookingService\n\
+         \x20   participant DB as PostgreSQL\n\
+         \x20   C->>B: POST /appointments\n\
+         \x20   B->>B: проверить BR-01, BR-02, BR-05\n\
+         \x20   B->>DB: BEGIN\n\
+         \x20   B->>DB: подобрать свободный кабинет (BR-04)\n\
+         \x20   B->>DB: INSERT INTO appointments\n\
+         \x20   alt ограничение исключения не нарушено\n\
+         \x20       B->>DB: INSERT INTO notifications (подтверждение, напоминания)\n\
+         \x20       B->>DB: COMMIT\n\
+         \x20       B-->>C: 201 { appointment }\n\
+         \x20   else 23P01 exclusion_violation\n\
+         \x20       B->>DB: ROLLBACK\n\
+         \x20       B-->>C: 409 SLOT_TAKEN\n\
+         \x20   end\n";
 
     #[test]
     fn a_flowchart_renders_to_svg() {
@@ -213,6 +265,92 @@ mod tests {
     fn an_empty_source_is_a_render_error() {
         let error = render("").expect_err("empty source");
         assert!(matches!(error, MermaidError::Render { .. }), "{error:?}");
+    }
+
+    /// Регрессия на дефект раскладки `mermaid-rs-renderer` 0.3.1: подпись
+    /// многострочного сообщения уезжала далеко вверх и читалась как подпись
+    /// предыдущего сообщения (см. [`drop_sequence_label_anchors`]).
+    ///
+    /// Проверяется геометрия готового SVG: у каждой подписи низ её блока
+    /// обязан лежать выше собственной стрелки и не дальше высоты подписи
+    /// плюс небольшой зазор. До исправления расхождение доходило до 88 px
+    /// при высоте подписи 58 px.
+    #[test]
+    fn sequence_labels_stay_next_to_their_own_arrow() {
+        let source = SEQUENCE_DENSE;
+        let rendered = render(source).expect("sequence renders");
+        let svg = String::from_utf8(rendered.svg).expect("svg is utf-8");
+
+        let mut checked = 0usize;
+        for (edge_id, arrow_y) in message_arrows(&svg) {
+            let (top, bottom) = label_extent(&svg, &edge_id).unwrap_or_else(|| {
+                panic!("у {edge_id} нет подписи");
+            });
+            let height = bottom - top;
+            assert!(
+                bottom < arrow_y,
+                "{edge_id}: подпись заходит на свою стрелку (низ {bottom}, стрелка {arrow_y})"
+            );
+            assert!(
+                arrow_y - bottom <= height + 20.0,
+                "{edge_id}: подпись оторвалась от своей стрелки на {:.1} px при высоте {height:.1}",
+                arrow_y - bottom
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 10, "проверены не все сообщения");
+    }
+
+    /// `(id ребра, y горизонтальной стрелки)` для каждого сообщения.
+    fn message_arrows(svg: &str) -> Vec<(String, f64)> {
+        let mut arrows = Vec::new();
+        for chunk in svg.split("id=\"edge-").skip(1) {
+            let Some((index, rest)) = chunk.split_once('"') else {
+                continue;
+            };
+            let Some(start) = rest.find("d=\"M ") else {
+                continue;
+            };
+            let path = &rest[start + 5..];
+            let Some(end) = path.find('"') else { continue };
+            // `M x,y L x,y` — берём y первой точки.
+            let Some(y) = path[..end]
+                .split_once(',')
+                .and_then(|(_, tail)| tail.split_whitespace().next())
+                .and_then(|value| value.parse::<f64>().ok())
+            else {
+                continue;
+            };
+            arrows.push((format!("edge-{index}"), y));
+        }
+        arrows
+    }
+
+    /// Baseline первой и последней строки подписи данного ребра.
+    ///
+    /// Строки внутри `<text>` смещаются относительными `dy`, поэтому низ
+    /// блока — это `y` плюс сумма всех сдвигов.
+    fn label_extent(svg: &str, edge_id: &str) -> Option<(f64, f64)> {
+        let marker = format!("<g class=\"edgeLabel\" data-edge-id=\"{edge_id}\"");
+        let start = svg.find(&marker)?;
+        let group = &svg[start..];
+        let group = &group[..group.find("</g>")?];
+
+        let attribute = |haystack: &str, name: &str| -> Option<f64> {
+            let at = haystack.find(name)?;
+            haystack[at + name.len()..]
+                .split('"')
+                .next()?
+                .parse::<f64>()
+                .ok()
+        };
+
+        let top = attribute(group, " y=\"")?;
+        let shifts: f64 = group
+            .match_indices(" dy=\"")
+            .filter_map(|(at, _)| attribute(&group[at..], " dy=\""))
+            .sum();
+        Some((top, top + shifts))
     }
 
     #[test]

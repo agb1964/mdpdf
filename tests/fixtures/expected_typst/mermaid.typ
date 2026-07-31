@@ -168,6 +168,17 @@
   align(center, image(path, alt: alt, width: width)),
 )
 
+// Широкая диаграмма на отдельной альбомной странице (ТЗ §10.5).
+// Решение принимает генератор: в книжной ориентации такая диаграмма
+// ужалась бы до нечитаемого кегля. Ширина снова приходит готовой —
+// она посчитана уже под альбомную полосу набора.
+// `page` со своими параметрами действует только на переданное содержимое,
+// последующий текст возвращается к книжной ориентации.
+#let mdpdf-diagram-landscape(path: "", alt: none, width: 0pt) = page(
+  flipped: true,
+  align(center + horizon, image(path, alt: alt, width: width)),
+)
+
 #show: mdpdf-document.with(
   paper: "a4",
   margin: 20mm,
@@ -198,6 +209,12 @@
   mdpdf-diagram(path: "/mdpdf-resources/mermaid-000005.svg", alt: "Mermaid diagram", width: 481.8897pt)
 
   mdpdf-diagram(path: "/mdpdf-resources/mermaid-000006.svg", alt: "Mermaid diagram", width: 450pt)
+
+  heading(level: 2, text("Широкая диаграмма на альбомной странице"))
+
+  par(text("В книжной полосе набора такой ряд ужался бы до нечитаемого кегля,") + text(" ") + text("поэтому диаграмма выносится на отдельную альбомную страницу."))
+
+  mdpdf-diagram-landscape(path: "/mdpdf-resources/mermaid-000007.svg", alt: "Mermaid diagram", width: 728.5039pt)
 
   heading(level: 2, text("Деградация до кода"))
 
