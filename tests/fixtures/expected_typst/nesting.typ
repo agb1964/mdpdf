@@ -207,27 +207,73 @@
           }
         }
       }
+      // Подпись бокса: явные `\n` (из `<br/>` в Mermaid) — отдельные строки.
+      let label-body = (size, label, fill: black) => {
+        let parts = label.split("\n")
+        if parts.len() <= 1 {
+          text(size: size, fill: fill, label)
+        } else {
+          align(center, stack(
+            dir: ttb,
+            spacing: 0.12em * fit,
+            ..parts.map(p => text(size: size, fill: fill, p)),
+          ))
+        }
+      }
+
       // Боксы.
       for (x, y, w, h, label, shape) in boxes {
-        let body = align(center + horizon, text(size: 0.85em * fit, label))
-        place(dx: x, dy: y, if shape == "circle" {
-          ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
+        let body = align(center + horizon, label-body(0.85em * fit, label))
+        if shape == "circle" {
+          place(dx: x, dy: y, ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body))
         } else if shape == "rounded" {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body)
+          place(dx: x, dy: y, rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body))
         } else if shape == "diamond" {
-          polygon(
+          place(dx: x, dy: y, polygon(
             fill: node-fill,
             stroke: node-stroke,
             (w / 2, 0pt),
             (w, h / 2),
             (w / 2, h),
             (0pt, h / 2),
-          )
-        } else {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        })
-        if shape == "diamond" {
+          ))
           place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "cylinder" {
+          // Цилиндр: корпус + эллипсы сверху и снизу.
+          let cap = calc.min(h * 0.22, 14pt * fit)
+          place(dx: x, dy: y + cap / 2, rect(
+            width: w,
+            height: h - cap,
+            fill: node-fill,
+            stroke: node-stroke,
+          ))
+          place(dx: x, dy: y, ellipse(width: w, height: cap, fill: node-fill, stroke: node-stroke))
+          place(dx: x, dy: y + h - cap, ellipse(width: w, height: cap, fill: node-fill, stroke: node-stroke))
+          place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "asymmetric" {
+          // Параллелограмм (сдвиг ~12% ширины).
+          let skew = w * 0.12
+          place(dx: x, dy: y, polygon(
+            fill: node-fill,
+            stroke: node-stroke,
+            (skew, 0pt),
+            (w, 0pt),
+            (w - skew, h),
+            (0pt, h),
+          ))
+          place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "group" {
+          // Рамка subgraph / alt: пунктир, светлая заливка, заголовок сверху.
+          place(dx: x, dy: y, rect(
+            width: w,
+            height: h,
+            fill: luma(252),
+            stroke: (paint: luma(150), thickness: stroke-width, dash: "dashed"),
+            inset: (top: 3pt * fit, rest: 2pt * fit),
+            align(top + center, label-body(0.7em * fit, label, fill: luma(80))),
+          ))
+        } else {
+          place(dx: x, dy: y, rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body))
         }
       }
       // Подписи рёбер — поверх линий, с белой подложкой. Прямоугольники

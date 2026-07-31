@@ -207,27 +207,73 @@
           }
         }
       }
+      // Подпись бокса: явные `\n` (из `<br/>` в Mermaid) — отдельные строки.
+      let label-body = (size, label, fill: black) => {
+        let parts = label.split("\n")
+        if parts.len() <= 1 {
+          text(size: size, fill: fill, label)
+        } else {
+          align(center, stack(
+            dir: ttb,
+            spacing: 0.12em * fit,
+            ..parts.map(p => text(size: size, fill: fill, p)),
+          ))
+        }
+      }
+
       // Боксы.
       for (x, y, w, h, label, shape) in boxes {
-        let body = align(center + horizon, text(size: 0.85em * fit, label))
-        place(dx: x, dy: y, if shape == "circle" {
-          ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
+        let body = align(center + horizon, label-body(0.85em * fit, label))
+        if shape == "circle" {
+          place(dx: x, dy: y, ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body))
         } else if shape == "rounded" {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body)
+          place(dx: x, dy: y, rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body))
         } else if shape == "diamond" {
-          polygon(
+          place(dx: x, dy: y, polygon(
             fill: node-fill,
             stroke: node-stroke,
             (w / 2, 0pt),
             (w, h / 2),
             (w / 2, h),
             (0pt, h / 2),
-          )
-        } else {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        })
-        if shape == "diamond" {
+          ))
           place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "cylinder" {
+          // Цилиндр: корпус + эллипсы сверху и снизу.
+          let cap = calc.min(h * 0.22, 14pt * fit)
+          place(dx: x, dy: y + cap / 2, rect(
+            width: w,
+            height: h - cap,
+            fill: node-fill,
+            stroke: node-stroke,
+          ))
+          place(dx: x, dy: y, ellipse(width: w, height: cap, fill: node-fill, stroke: node-stroke))
+          place(dx: x, dy: y + h - cap, ellipse(width: w, height: cap, fill: node-fill, stroke: node-stroke))
+          place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "asymmetric" {
+          // Параллелограмм (сдвиг ~12% ширины).
+          let skew = w * 0.12
+          place(dx: x, dy: y, polygon(
+            fill: node-fill,
+            stroke: node-stroke,
+            (skew, 0pt),
+            (w, 0pt),
+            (w - skew, h),
+            (0pt, h),
+          ))
+          place(dx: x, dy: y, box(width: w, height: h, body))
+        } else if shape == "group" {
+          // Рамка subgraph / alt: пунктир, светлая заливка, заголовок сверху.
+          place(dx: x, dy: y, rect(
+            width: w,
+            height: h,
+            fill: luma(252),
+            stroke: (paint: luma(150), thickness: stroke-width, dash: "dashed"),
+            inset: (top: 3pt * fit, rest: 2pt * fit),
+            align(top + center, label-body(0.7em * fit, label, fill: luma(80))),
+          ))
+        } else {
+          place(dx: x, dy: y, rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body))
         }
       }
       // Подписи рёбер — поверх линий, с белой подложкой. Прямоугольники
@@ -274,6 +320,12 @@
   heading(level: 2, text("Sequence"))
 
   mdpdf-diagram(width: 151.2pt, height: 106.9pt, fit: 100%, boxes: ((0pt, 0pt, 55.6pt, 24.3pt, "Клиент", "rect"), (95.6pt, 0pt, 55.6pt, 24.3pt, "Сервер", "rect")), lines: ((27.8pt, 50.45pt, 123.4pt, 50.45pt, "filled-arrow"), (123.4pt, 82.75pt, 27.8pt, 82.75pt, "dashed-arrow"), (27.8pt, 24.3pt, 27.8pt, 106.9pt, "dashed"), (123.4pt, 24.3pt, 123.4pt, 106.9pt, "dashed")), labels: ((61.74pt, 45.44pt, 27.72pt, "запрос"), (64.05pt, 77.75pt, 23.1pt, "ответ")))
+
+  heading(level: 2, text("Subgraph, cylinder, note, alt"))
+
+  mdpdf-diagram(width: 256.1pt, height: 94.6pt, fit: 100%, boxes: ((66pt, -12pt, 190.1pt, 106.6pt, "Сервер", "group"), (96.3pt, 29.15pt, 35.8pt, 24.3pt, "API", "rect"), (0pt, 22pt, 62.2pt, 38.6pt, "Клиент\nснаружи", "rect"), (162.1pt, 0pt, 82pt, 34.3pt, "PostgreSQL", "cylinder"), (162.1pt, 58.3pt, 61pt, 24.3pt, "файлы", "asymmetric")), lines: ((62.2pt, 41.3pt, 96.3pt, 41.3pt, "arrow"), (132.1pt, 36.44pt, 162.1pt, 28.29pt, "arrow"), (132.1pt, 47.96pt, 162.1pt, 59.11pt, "arrow")), labels: ((67.7pt, 36.29pt, 23.1pt, "HTTPS"),))
+
+  mdpdf-diagram(width: 144.6pt, height: 217.7pt, fit: 100%, boxes: ((0pt, 100.9pt, 144.6pt, 108.8pt, "alt ok", "group"), (0pt, 0pt, 68.8pt, 24.3pt, "Mini App", "rect"), (108.8pt, 0pt, 35.8pt, 24.3pt, "API", "rect"), (62.6pt, 70.6pt, 128.2pt, 24.3pt, "проверить подпись", "rounded")), lines: ((34.4pt, 50.45pt, 126.7pt, 50.45pt, "filled-arrow"), (126.7pt, 135.15pt, 34.4pt, 135.15pt, "dashed-filled-arrow"), (126.7pt, 185.55pt, 34.4pt, 185.55pt, "dashed-filled-arrow"), (8pt, 151.3pt, 136.6pt, 151.3pt, "dashed"), (126.7pt, 24.3pt, 126.7pt, 217.7pt, "dashed"), (34.4pt, 24.3pt, 34.4pt, 217.7pt, "dashed")), labels: ((69pt, 45.44pt, 23.1pt, "login"), (73.62pt, 130.15pt, 13.86pt, "200"), (73.62pt, 180.55pt, 13.86pt, "401"), (22.76pt, 155.35pt, 18.48pt, "else")))
 
   heading(level: 2, text("Деградация до кода"))
 

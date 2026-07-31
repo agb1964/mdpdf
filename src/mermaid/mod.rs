@@ -14,7 +14,7 @@ pub use layout::{
     LineStyle, PlacedBox, PlacedDiagram, PlacedLabel, PlacedLine, PlacedShape, layout,
 };
 pub use model::{
-    Diagram, Direction, FlowEdge, FlowGraph, FlowNode, MessageStyle, NodeShape, Participant,
-    SequenceDiagram, SequenceMessage,
+    Diagram, Direction, FlowEdge, FlowGraph, FlowNode, FlowSubgraph, MessageStyle, NodeShape,
+    Participant, SequenceDiagram, SequenceItem, SequenceMessage,
 };
 pub use parser::parse;

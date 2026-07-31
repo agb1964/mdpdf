@@ -86,6 +86,9 @@ fn shape_literal(shape: PlacedShape) -> String {
         PlacedShape::Rounded => "rounded",
         PlacedShape::Diamond => "diamond",
         PlacedShape::Circle => "circle",
+        PlacedShape::Cylinder => "cylinder",
+        PlacedShape::Asymmetric => "asymmetric",
+        PlacedShape::Group => "group",
     };
     string_literal(name)
 }

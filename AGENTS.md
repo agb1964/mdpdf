@@ -14,8 +14,8 @@ CLI-утилита: `Markdown → собственное AST → Typst source �
 |---|---|---|
 | `src/markdown/` | `pulldown-cmark`, `ast` | Typst, PDF, вывод в файл |
 | `src/ast/` | — | Typst, Markdown-парсер |
-| `src/mermaid/` | — (своя модель диаграмм) | Typst, `pulldown-cmark`, файловая система |
-| `src/typst_gen/` | `ast`, `mermaid` | `pulldown-cmark`, файловая система, компилятор |
+| `src/mermaid/` | интеграция mmdr / legacy layout на время миграции (ТЗ §10.5) | `pulldown-cmark`, файловая система, сеть, JS |
+| `src/typst_gen/` | `ast`, mermaid→SVG resource | `pulldown-cmark`, компилятор |
 | `src/compiler/` | `typst`, `typst_pdf` | Markdown |
 
 `typst::*` и `typst_pdf::*` импортируются **только** внутри `src/compiler/`.
@@ -23,9 +23,11 @@ CLI-утилита: `Markdown → собственное AST → Typst source �
 
 ## Запрещено
 
-- Вызов внешних процессов, включая `typst` CLI.
+- Вызов внешних процессов, включая `typst` CLI, Node.js, mermaid-cli.
 - Сетевой доступ, загрузка ресурсов по HTTP/HTTPS, Typst Universe и любые внешние пакеты.
-- Chromium, WebView, HTML/CSS как промежуточный формат, Pandoc, LaTeX.
+- Chromium, Puppeteer, WebView, HTML/CSS как промежуточный формат, Pandoc, LaTeX.
+- Встраивание JS-движка (V8/QuickJS/Boa) для прогона Mermaid.js; рендер Mermaid —
+  только `mermaid-rs-renderer` → SVG → Typst image (ТЗ §10.5, `deny.toml`).
 - Системные шрифты, кеш в домашнем каталоге, чтение произвольных файлов.
 - `unsafe` (`#![forbid(unsafe_code)]`), `unwrap()`, `expect()`, `panic!` в production-коде.
 - `anyhow` в доменных модулях — только `thiserror`; `anyhow` допустим в тестовых хелперах.

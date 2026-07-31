@@ -114,39 +114,24 @@ PlantUML, сетевые изображения, пользовательски�
 
 ## Диаграммы Mermaid
 
-Блоки кода с языком `mermaid` рендерятся как диаграммы собственным движком —
-без JavaScript, внешних процессов и сети. Поддерживается подмножество:
+Целевой конвейер (ТЗ §10.5):
 
-- flowchart (`graph`/`flowchart`, направления TD/TB и LR; без направления
-  используется TD): узлы `id[текст]`, `id(текст)`, `id{текст}`,
-  `id((текст))`; рёбра `-->`, `---`, с подписями `-- текст -->` и
-  `-->|текст|`; цепочки `a --> b --> c`;
-- sequence (`sequenceDiagram`): `participant A as Подпись`, сообщения
-  `A->B: текст`, `->>`, `-->`, `-->>`, включая сообщения самому себе.
+```text
+mermaid-блок  →  mermaid-rs-renderer (Rust)  →  SVG  →  Typst image  →  PDF
+```
 
-Все остальные типы из
-[официального каталога Mermaid 11.16.0](https://mermaid.js.org/intro/syntax-reference.html)
-не поддерживаются:
+Без JavaScript, Chromium, Node.js и внешних процессов. Движок —
+[`mermaid-rs-renderer`](https://crates.io/crates/mermaid-rs-renderer) (library
+API, `default-features = false`). Неподдерживаемый синтаксис или ошибка
+рендера не прерывают сборку: блок выводится как обычный код, в stderr —
+предупреждение.
 
-- Swimlanes Diagram, Class Diagram, State Diagram, Entity Relationship Diagram,
-  User Journey, Gantt, Pie Chart;
-- Quadrant Chart, Requirement Diagram, GitGraph (Git) Diagram, C4 Diagram,
-  Mindmaps, Timeline, ZenUML;
-- Sankey, XY Chart, Block Diagram, Packet, Kanban, Architecture, Radar;
-- Event Modeling, Treemap, Venn, Ishikawa, Wardley, Cynefin, TreeView.
+Типы диаграмм — те, что принимает закреплённая в `Cargo.lock` версия mmdr
+(flowchart, sequence, class, state, ER, gantt и др.). Подробности и
+ограничения безопасности SVG — в `docs/mdpdf-technical-spec-v2.md` §10.5.
 
-Внутри поддерживаемых типов также не реализованы `subgraph`, стили, классы,
-клики и направления BT/RL в flowchart; `note`, `loop`, `alt`, `activate`,
-`break` и другие расширенные конструкции sequence. Любой новый тип,
-добавленный в Mermaid после 11.16.0, считается неподдерживаемым до его явного
-включения в ТЗ.
-
-Диаграмма вне подмножества или с синтаксической ошибкой не прерывает сборку:
-блок выводится как обычный код, а в stderr попадает предупреждение. Рёбра
-flowchart рисуются прямыми линиями — на плотных графах возможны пересечения.
-Диаграмма автоматически масштабируется (включая текст подписей), чтобы целиком
-поместиться в текстовую область страницы и по ширине, и по высоте; между
-страницами она не разрывается.
+> **Статус:** политика и `deny.toml` уже под mmdr; runtime-интеграция
+> (замена legacy `mdpdf-diagram`) выполняется отдельной задачей.
 
 ## Изображения
 

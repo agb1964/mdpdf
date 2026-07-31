@@ -110,7 +110,7 @@
           "level": "H2",
           "content": [
             {
-              "Text": "Деградация до кода"
+              "Text": "Subgraph, cylinder, note, alt"
             }
           ],
           "id": null
@@ -118,7 +118,48 @@
       },
       "span": {
         "start": 744,
-        "end": 782
+        "end": 777
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "graph LR\n    Client[\"Клиент<br/>снаружи\"] -->|HTTPS| API\n    subgraph Server[\"Сервер\"]\n        API[API] --> DB[(PostgreSQL)]\n        API --> Files[/файлы/]\n    end"
+        }
+      },
+      "span": {
+        "start": 778,
+        "end": 980
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "sequenceDiagram\n    participant App as Mini App\n    participant API as API\n    App->>API: login\n    Note over API: проверить подпись\n    alt ok\n        API-->>App: 200\n    else\n        API-->>App: 401\n    end"
+        }
+      },
+      "span": {
+        "start": 982,
+        "end": 1221
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Деградация до кода"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 1223,
+        "end": 1261
       }
     },
     {
@@ -129,8 +170,8 @@
         }
       },
       "span": {
-        "start": 783,
-        "end": 829
+        "start": 1262,
+        "end": 1308
       }
     }
   ]

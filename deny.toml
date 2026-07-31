@@ -1,4 +1,12 @@
 # Конфигурация cargo-deny (ТЗ §22).
+#
+# Политика Mermaid (ТЗ §10.5):
+#   Разрешён только crates.io-крейт `mermaid-rs-renderer` (MIT) как library API:
+#   mermaid source → SVG → виртуальный ресурс → Typst `#image` / `mdpdf-image`.
+#   Запрещены: Node.js, mermaid-cli, Puppeteer/Chromium, встраивание JS-движков
+#   (V8/QuickJS/Boa) для прогона Mermaid.js, git-зависимости mermaid (см. [sources]).
+#   Feature `cli` / `png` / `benchmark` у mermaid-rs-renderer запрещены —
+#   растеризация и CLI не нужны; PNG/resvg для диаграмм не подключать.
 
 [graph]
 all-features = true
@@ -7,15 +15,16 @@ all-features = true
 version = 2
 yanked = "deny"
 # Все записи ниже приходят из дерева typst, закреплённого `=0.15.1` (ТЗ §6.2),
-# поэтому обновлением зависимостей не устраняются. Список пересматривается
-# при каждом подъёме версии typst: снять ignore, прогнать `cargo deny check
-# advisories` и оставить только то, что всё ещё не исправлено.
+# и/или из `fontdb`/`ttf-parser` (общие с mermaid-rs-renderer). Обновлением
+# зависимостей mdpdf они не устраняются. Список пересматривается при каждом
+# подъёме версии typst или mermaid-rs-renderer: снять ignore, прогнать
+# `cargo deny check advisories` и оставить только то, что всё ещё не исправлено.
 ignore = [
     # unmaintained, безопасной версии не существует
     { id = "RUSTSEC-2025-0141", reason = "bincode 1.3.3: syntect → two-face → typst-library" },
     { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15: biblatex/hayagriva → typst-library" },
     { id = "RUSTSEC-2026-0206", reason = "rustybuzz 0.20.1: krilla, usvg, typst-layout; замена harfrust ещё не принята upstream" },
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1: fontdb, rustybuzz, typst-*; замена skrifa ещё не принята upstream" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1: fontdb, rustybuzz, typst-*; mermaid-rs-renderer; замена skrifa ещё не принята upstream" },
     { id = "RUSTSEC-2024-0320", reason = "yaml-rust 0.4.5: syntect → two-face → typst-library" },
     # vulnerability: фикс есть в quick-xml >= 0.41, но citationberg 0.7.0 требует ровно 0.38.1
     { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38.4: citationberg → hayagriva → typst-library" },
@@ -33,6 +42,8 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "CC0-1.0",
+    # aho-corasick / memchr (regex → mermaid-rs-renderer): Unlicense OR MIT
+    "Unlicense",
 ]
 confidence-threshold = 0.9
 
@@ -45,6 +56,25 @@ skip = [
     { name = "quick-xml", version = "=0.38.4" },
     { name = "roxmltree", version = "=0.20.0" },
 ]
+# Стек «браузер / headless для Mermaid» — несовместим с ТЗ §2, §10.5.
+deny = [
+    { name = "headless_chrome", reason = "ТЗ §10.5: Mermaid без Chromium" },
+    { name = "chromiumoxide", reason = "ТЗ §10.5: Mermaid без Chromium" },
+    { name = "fantoccini", reason = "ТЗ §10.5: Mermaid без WebDriver" },
+    { name = "thirtyfour", reason = "ТЗ §10.5: Mermaid без WebDriver" },
+    { name = "webdriver", reason = "ТЗ §10.5: Mermaid без WebDriver" },
+    { name = "v8", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
+    { name = "deno_core", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
+    { name = "rquickjs", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
+    { name = "quick-js", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
+    { name = "boa_engine", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
+]
+
+# mermaid-rs-renderer: только SVG library API (когда крейт появится в графе).
+[[bans.features]]
+crate = "mermaid-rs-renderer"
+deny = ["cli", "png", "benchmark"]
+reason = "ТЗ §10.5: default-features = false; без CLI и без resvg/PNG"
 
 [sources]
 unknown-registry = "deny"

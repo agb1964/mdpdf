@@ -283,9 +283,11 @@ fn mermaid_sequence_generates_a_diagram_call() {
 #[test]
 fn payloads_in_mermaid_labels_are_not_executable() {
     for payload in PAYLOADS {
-        // Квадратные скобки — синтаксис узлов, убираем их из подписи.
-        let label = payload.replace(['[', ']'], "");
-        let markdown = format!("```mermaid\ngraph TD\nA[{label}] -->|{label}| B\n```\n");
+        // Квадратные скобки — синтаксис узлов `id[…]`; форма `id["…"]` ещё
+        // и снимает обрамляющие кавычки как синтаксис Mermaid. Проверяем
+        // через `id(…)` и подпись ребра, где payload остаётся текстом.
+        let label = payload.replace(['[', ']', '(', ')'], "");
+        let markdown = format!("```mermaid\ngraph TD\nA({label}) -->|{label}| B\n```\n");
         let generated = generate(&markdown);
         let body = body_of(&generated);
         assert!(

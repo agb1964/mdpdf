@@ -4,7 +4,7 @@
 (`docs/mdpdf-technical-spec-v2.md`), принятые решения и оставшиеся работы.
 Обновляется при закрытии значимых задач и перед выпуском.
 
-Последнее обновление: 2026-07-30.
+Последнее обновление: 2026-07-30 (layout Mermaid: cycles + subgraph edges).
 
 Старое ТЗ (`docs/Техническое задание.pdf`) заменено редакцией 2.0. Журнал
 переписан под новую модель готовности: не milestones 0–5 как план работ, а
@@ -72,7 +72,8 @@ release-binary-size и clean-environment jobs. Release `v0.1.0` (`8c79ae5`) со
 6. Лимиты ресурсов, fuzz targets, golden AST/Typst/структура PDF.
 7. Исправления по внешнему review (паника UTF-8, nesting, коды выхода, гонки).
 8. Remote CI/release, Noto Color Emoji и предупреждение об отсутствующих глифах.
-9. Mermaid flowchart (TD/TB/LR) и sequence с безопасным fallback в code block.
+9. Mermaid flowchart (TD/TB/LR, subgraph, cylinder/asymmetric) и sequence
+   (Note over, alt/else/end) с безопасным fallback в code block.
 
 ### Замеры (ТЗ §16.1), release, Apple Silicon
 
@@ -189,6 +190,26 @@ release-binary-size и clean-environment jobs. Release `v0.1.0` (`8c79ae5`) со
 - README и ТЗ содержат полный перечень 28 самостоятельных типов диаграмм,
   отсутствующих в поддерживаемом подмножестве по каталогу Mermaid 11.16.0;
   будущие типы также считаются неподдерживаемыми до явного изменения ТЗ.
+- 2026-07-30: подмножество расширено под реальные архитектурные документы
+  (`subgraph` + вложенность + рёбра к id подграфа; cylinder `[(…)]`,
+  asymmetric `[/…/]`, quoted `["…"]`, `<br/>` в подписях; sequence
+  `Note over`, `alt`/`else`/`end`). Проверено на
+  `03-architecture.md` (ТКМ Хайнань): все 4 диаграммы рендерятся в PDF
+  без деградации в code block.
+- 2026-07-30 (layout): DFS для feedback-arc — от истоков; рёбра к id
+  subgraph разворачиваются в рёбра между листьями. Без этого цикл
+  `App → Telegram → Server → …` либо ставил NestJS в слой 0, либо раздувал
+  ширину LR-диаграммы до ~9000 pt (fit 5 %). На `03-architecture.md`
+  контекст и компоненты снова читаются сверху вниз.
+- 2026-07-30 (**политика §10.5**): целевой конвейер
+  `mermaid → mermaid-rs-renderer → SVG → Typst image → PDF`. ТЗ и
+  `deny.toml` обновлены (ban Chromium/JS-runtime crates, ban mmdr
+  features `cli`/`png`/`benchmark`, Unlicense для regex-стека).
+  Runtime-интеграция mmdr — следующая задача; legacy `mdpdf-diagram`
+  пока в коде.
+- 2026-07-30: полный план реализации —
+  [`docs/mermaid-mmdr-plan.md`](mermaid-mmdr-plan.md) (фазы 0, A–G,
+  PR-нарезка, риски, критерии готовности).
 
 Исправления по review самой фичи:
 
