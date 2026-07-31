@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use mdpdf::markdown::parser::MarkdownParser;
 use mdpdf::typst_gen;
-use mdpdf::typst_gen::generator::{GeneratedTypst, RenderOptions, TypstGenerator};
+use mdpdf::typst_gen::generator::{
+    GeneratedTypst, RenderOptions, ResourceReference, TypstGenerator,
+};
 
 fn generate(markdown: &str) -> GeneratedTypst {
     generate_with(markdown, RenderOptions::default())
@@ -146,7 +148,7 @@ fn resources_are_numbered_in_traversal_order() {
     let sources: Vec<&str> = generated
         .resources
         .iter()
-        .map(|resource| resource.source_path.as_str())
+        .map(ResourceReference::display_path)
         .collect();
     assert_eq!(sources, vec!["first.png", "second.jpg"]);
 }

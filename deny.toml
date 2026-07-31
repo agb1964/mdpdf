@@ -70,10 +70,12 @@ deny = [
     { name = "boa_engine", reason = "ТЗ §10.5: без встраивания JS-движка для Mermaid.js" },
 ]
 
-# mermaid-rs-renderer: только SVG library API (когда крейт появится в графе).
+# mermaid-rs-renderer: только SVG library API.
+# В 0.3.1 объявлены ровно `cli`, `png` и `default = ["cli", "png"]`;
+# несуществующие имена здесь давали бы warning[unknown-feature].
 [[bans.features]]
 crate = "mermaid-rs-renderer"
-deny = ["cli", "png", "benchmark"]
+deny = ["cli", "png"]
 reason = "ТЗ §10.5: default-features = false; без CLI и без resvg/PNG"
 
 [sources]

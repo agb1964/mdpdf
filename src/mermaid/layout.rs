@@ -609,7 +609,8 @@ fn find_back_edges(graph: &FlowGraph) -> Vec<bool> {
     let expanded = expanded_leaf_edges(graph);
     let mut excluded = vec![false; graph.edges.len()];
     let mut adjacency: BTreeMap<&str, Vec<(usize, &str)>> = BTreeMap::new();
-    let mut indegree: BTreeMap<&str, usize> = graph.nodes.keys().map(|id| (id.as_str(), 0)).collect();
+    let mut indegree: BTreeMap<&str, usize> =
+        graph.nodes.keys().map(|id| (id.as_str(), 0)).collect();
     for &(edge_index, from, to) in &expanded {
         adjacency.entry(from).or_default().push((edge_index, to));
         *indegree.entry(to).or_insert(0) += 1;

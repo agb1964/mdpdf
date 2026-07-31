@@ -25,12 +25,42 @@ pub struct GeneratedTypst {
 pub struct ResourceReference {
     /// Виртуальный путь вида `/mdpdf-resources/000001.png`.
     pub logical_path: String,
-    /// Путь в исходном Markdown — компилятор разрешает его относительно base dir.
-    pub source_path: String,
+    /// Откуда берутся байты. Источник ровно один — это закреплено типом,
+    /// а не соглашением.
+    pub source: ResourceSource,
     /// Вид ресурса.
     pub kind: ResourceKind,
     /// Диапазон в исходном Markdown.
     pub span: Option<SourceSpan>,
+}
+
+/// Источник байтов ресурса (ТЗ §33.2, §10.5.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResourceSource {
+    /// Файл рядом с документом: путь из Markdown, компилятор разрешает его
+    /// относительно каталога документа.
+    File {
+        /// Путь в том виде, в каком он записан в Markdown.
+        path: String,
+    },
+    /// Байты, порождённые самим `mdpdf` (SVG диаграммы Mermaid).
+    /// Файловая система не участвует.
+    Embedded {
+        /// Содержимое ресурса.
+        bytes: Vec<u8>,
+    },
+}
+
+impl ResourceReference {
+    /// Имя ресурса для сообщений об ошибках: путь из Markdown либо
+    /// виртуальный путь, если байты порождены самим `mdpdf`.
+    #[must_use]
+    pub fn display_path(&self) -> &str {
+        match &self.source {
+            ResourceSource::File { path } => path,
+            ResourceSource::Embedded { .. } => &self.logical_path,
+        }
+    }
 }
 
 /// Вид ресурса.
