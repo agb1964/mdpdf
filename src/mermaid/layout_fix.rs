@@ -9,9 +9,13 @@
 //!    мусор. Лечение: оставить first→last **только** для таких рёбер.
 //!    Обходные маршруты (внешний узел → цель внутри subgraph, мимо
 //!    чужих узлов) схлопывать нельзя: хорда first→last режет середину.
-//! 2. Подписи flowchart наезжают на узлы. Ставим центр на свободное
-//!    место вдоль/рядом с путём, избегая bbox узлов и полосы заголовка
-//!    subgraph.
+//! 2. Подписи flowchart наезжают на узлы. Проход размещения подписей
+//!    самого mmdr (`label_placement`, beam search с учётом полилиний
+//!    рёбер) на чистых раскладках результат лучше не трогать: здесь
+//!    переставляются только подписи, чей якорь реально конфликтует с
+//!    препятствиями (bbox узлов, полоса заголовка subgraph, уже
+//!    размещённые подписи). Конфликтные ищут свободное место вдоль или
+//!    рядом с путём.
 //!
 //! Sequence-подписи здесь не трогаем: для них якоря снимаются отдельно
 //! в [`crate::mermaid::render`].
@@ -68,13 +72,29 @@ fn simplify_subgraph_anchor_edges(layout: &mut Layout) {
     }
 }
 
-/// Ставит подписи flowchart на середину ребра и отталкивает от узлов.
+/// Пересечение подписи с препятствием до этой площади считается касанием
+/// pad-зоны, а не конфликтом (полное залезание в узел — сотни px²).
+pub(crate) const CLEAN_OVERLAP_PX2: f32 = 80.0;
+
+/// Штраф за пересечение подписи с чужой полилинией. Мягкий: в плотной
+/// схеме полностью свободного места может не быть, но свободное
+/// предпочтительнее.
+const CROSSING_PENALTY: f32 = 60.0;
+
+/// Переставляет только конфликтующие подписи flowchart.
 ///
 /// `label_anchor` в mmdr — **центр** подписи (`LabelRect::from_center`).
 ///
-/// Препятствия — только видимые узлы и **полоса заголовка** subgraph
-/// (не весь кластер: иначе любая подпись на ребре внутрь Server
-/// считается «внутри препятствия» и уезжает в случайное место).
+/// Финальный проход размещения подписей самого mmdr (`label_placement`)
+/// учитывает полилинии рёбер и текст узлов, поэтому на чистых раскладках
+/// его якорь сохраняем: безусловная перезапись более простой эвристикой
+/// могла бы ухудшить результат. Перестановка запускается, только если
+/// якорь mmdr пересекается с препятствием сверх [`CLEAN_OVERLAP_PX2`].
+///
+/// Препятствия — только видимые узлы (+ pad), **полоса заголовка**
+/// subgraph (не весь кластер: иначе любая подпись на ребре внутрь Server
+/// считается «внутри препятствия» и уезжает в случайное место) и уже
+/// размещённые подписи, чтобы не слипались.
 fn place_flowchart_edge_labels(layout: &mut Layout) {
     if layout.kind != DiagramKind::Flowchart {
         return;
@@ -112,15 +132,24 @@ fn place_flowchart_edge_labels(layout: &mut Layout) {
         .edges
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.label.as_ref().is_some_and(|l| l.width > 0.0 && l.height > 0.0))
+        .filter(|(_, e)| {
+            e.label
+                .as_ref()
+                .is_some_and(|l| l.width > 0.0 && l.height > 0.0)
+        })
         .map(|(i, _)| i)
         .collect();
 
     for edge_idx in labeled {
-        let (points, label_w, label_h) = {
+        let (points, label_w, label_h, current) = {
             let edge = &layout.edges[edge_idx];
             let label = edge.label.as_ref().expect("filtered");
-            (edge.points.clone(), label.width, label.height)
+            (
+                edge.points.clone(),
+                label.width,
+                label.height,
+                edge.label_anchor,
+            )
         };
         if points.len() < 2 {
             continue;
@@ -128,6 +157,22 @@ fn place_flowchart_edge_labels(layout: &mut Layout) {
 
         let half_w = label_w * 0.5;
         let half_h = label_h * 0.5;
+
+        // Чистый якорь mmdr не трогаем, только занимаем место, чтобы
+        // конфликтующие подписи не сели на него.
+        if let Some((cx, cy)) = current {
+            let overlap = overlap_area(cx - half_w, cy - half_h, label_w, label_h, &obstacles);
+            if overlap <= CLEAN_OVERLAP_PX2 {
+                obstacles.push((
+                    cx - half_w - 2.0,
+                    cy - half_h - 2.0,
+                    label_w + 4.0,
+                    label_h + 4.0,
+                ));
+                continue;
+            }
+        }
+
         let tall = label_h > 30.0;
 
         let fractions = [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75];
@@ -161,28 +206,38 @@ fn place_flowchart_edge_labels(layout: &mut Layout) {
             ]
         };
 
-        let mut best = point_at_fraction(&points, 0.5).unwrap_or(points[0]);
-        let mut best_score = f32::INFINITY;
+        let mut best = (
+            point_at_fraction(&points, 0.5).unwrap_or(points[0]),
+            f32::INFINITY,
+        );
 
         for &frac in &fractions {
             let Some(base) = point_at_fraction(&points, frac) else {
                 continue;
             };
             for &(dx, dy) in offsets {
-                let cx = base.0 + dx;
-                let cy = base.1 + dy;
-                let overlap =
-                    overlap_area(cx - half_w, cy - half_h, label_w, label_h, &obstacles);
-                let path_dist = (dx * dx + dy * dy).sqrt();
-                let mid_bias = (frac - 0.5).abs() * 8.0;
-                let total = overlap * 30.0 + path_dist + mid_bias;
-                if total < best_score {
-                    best_score = total;
-                    best = (cx, cy);
+                let center = (base.0 + dx, base.1 + dy);
+                let rect = (center.0 - half_w, center.1 - half_h, label_w, label_h);
+                let total = candidate_cost(layout, edge_idx, &obstacles, rect)
+                    + (dx * dx + dy * dy).sqrt()
+                    + (frac - 0.5).abs() * 8.0;
+                if total < best.1 {
+                    best = (center, total);
                 }
             }
         }
 
+        // Якорь mmdr — тоже кандидат: в патологически плотной раскладке
+        // все свободные места могут оказаться хуже него.
+        if let Some(center) = current {
+            let rect = (center.0 - half_w, center.1 - half_h, label_w, label_h);
+            let current_cost = candidate_cost(layout, edge_idx, &obstacles, rect);
+            if current_cost < best.1 {
+                best = (center, current_cost);
+            }
+        }
+
+        let best = best.0;
         layout.edges[edge_idx].label_anchor = Some(best);
         // Занимаем место, чтобы следующая подпись не села сверху.
         obstacles.push((
@@ -192,6 +247,58 @@ fn place_flowchart_edge_labels(layout: &mut Layout) {
             label_h + 4.0,
         ));
     }
+}
+
+/// Стоимость кандидата: пересечение прямоугольника подписи с препятствиями
+/// и с чужими полилиниями рёбер. Близость к пути и середине ребра считает
+/// вызывающий код.
+fn candidate_cost(
+    layout: &Layout,
+    edge_idx: usize,
+    obstacles: &[(f32, f32, f32, f32)],
+    rect: (f32, f32, f32, f32),
+) -> f32 {
+    let overlap = overlap_area(rect.0, rect.1, rect.2, rect.3, obstacles);
+    let crossings = layout
+        .edges
+        .iter()
+        .enumerate()
+        .filter(|(idx, edge)| *idx != edge_idx && polyline_intersects_rect(&edge.points, rect))
+        .count() as f32;
+    overlap * 30.0 + crossings * CROSSING_PENALTY
+}
+
+/// Хотя бы один сегмент полилинии пересекает прямоугольник.
+fn polyline_intersects_rect(points: &[(f32, f32)], rect: (f32, f32, f32, f32)) -> bool {
+    points
+        .windows(2)
+        .any(|w| segment_intersects_rect(w[0], w[1], rect))
+}
+
+/// Отрезок пересекает прямоугольник (конец внутри или пересечение сторон).
+fn segment_intersects_rect(a: (f32, f32), b: (f32, f32), rect: (f32, f32, f32, f32)) -> bool {
+    let inside = |p: (f32, f32)| {
+        p.0 >= rect.0 && p.0 <= rect.0 + rect.2 && p.1 >= rect.1 && p.1 <= rect.1 + rect.3
+    };
+    if inside(a) || inside(b) {
+        return true;
+    }
+    let corners = [
+        (rect.0, rect.1),
+        (rect.0 + rect.2, rect.1),
+        (rect.0 + rect.2, rect.1 + rect.3),
+        (rect.0, rect.1 + rect.3),
+    ];
+    (0..4).any(|i| segments_intersect(a, b, corners[i], corners[(i + 1) % 4]))
+}
+
+/// Отрезки пересекаются (без коллинеарных касаний).
+fn segments_intersect(a: (f32, f32), b: (f32, f32), c: (f32, f32), d: (f32, f32)) -> bool {
+    let cross = |o: (f32, f32), p: (f32, f32), q: (f32, f32)| {
+        (p.0 - o.0) * (q.1 - o.1) - (p.1 - o.1) * (q.0 - o.0)
+    };
+    (cross(a, b, c) > 0.0) != (cross(a, b, d) > 0.0)
+        && (cross(c, d, a) > 0.0) != (cross(c, d, b) > 0.0)
 }
 
 fn distance(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -234,13 +341,7 @@ fn point_at_fraction(points: &[(f32, f32)], t: f32) -> Option<(f32, f32)> {
     points.last().copied()
 }
 
-fn overlap_area(
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    obstacles: &[(f32, f32, f32, f32)],
-) -> f32 {
+fn overlap_area(x: f32, y: f32, w: f32, h: f32, obstacles: &[(f32, f32, f32, f32)]) -> f32 {
     let mut area = 0.0;
     for &(ox, oy, ow, oh) in obstacles {
         let ix1 = x.max(ox);
@@ -259,18 +360,7 @@ fn overlap_area(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mermaid_rs_renderer::{LayoutConfig, Theme, compute_layout, parse_mermaid_strict};
-
-    fn layout_of(source: &str) -> Layout {
-        let mut theme = Theme::modern();
-        theme.font_family = "mdpdf-diagram-sans".to_owned();
-        let config = LayoutConfig {
-            fast_text_metrics: true,
-            ..LayoutConfig::default()
-        };
-        let parsed = parse_mermaid_strict(source).expect("parse");
-        compute_layout(&parsed.graph, &theme, &config)
-    }
+    use crate::mermaid::render::layout_of;
 
     /// Широкий subgraph + рёбра к/от его id (проверка «пилки»).
     const ARCHITECTURE_DOMAIN: &str = r#"flowchart TB
@@ -329,7 +419,11 @@ mod tests {
         fixup_layout(&mut layout);
         for edge in &layout.edges {
             if edge.from == "BOT" || edge.to == "Infra" || edge.from == "Domain" {
-                let min_x = edge.points.iter().map(|p| p.0).fold(f32::INFINITY, f32::min);
+                let min_x = edge
+                    .points
+                    .iter()
+                    .map(|p| p.0)
+                    .fold(f32::INFINITY, f32::min);
                 let max_x = edge
                     .points
                     .iter()
@@ -356,10 +450,7 @@ mod tests {
             .find(|e| e.from == "Admin" && e.to == "Edge")
             .map(|e| e.points.len())
             .expect("Admin->Edge");
-        assert!(
-            before > 2,
-            "ожидали обходной маршрут mmdr, pts={before}"
-        );
+        assert!(before > 2, "ожидали обходной маршрут mmdr, pts={before}");
 
         fixup_layout(&mut layout);
 
@@ -378,11 +469,7 @@ mod tests {
         // Хорда first→last не должна резать bbox промежуточного Relay.
         let mid = layout.nodes.get("Relay").expect("Relay");
         let mid_rect = (mid.x, mid.y, mid.width, mid.height);
-        let cuts_center = segment_hits_rect(
-            edge.points[0],
-            *edge.points.last().unwrap(),
-            mid_rect,
-        );
+        let cuts_center = segment_hits_rect(edge.points[0], *edge.points.last().unwrap(), mid_rect);
         if edge.points.len() == 2 {
             assert!(
                 !cuts_center,
@@ -462,11 +549,7 @@ mod tests {
     }
 
     /// Грубая проверка: отрезок пересекает внутренность прямоугольника.
-    fn segment_hits_rect(
-        a: (f32, f32),
-        b: (f32, f32),
-        rect: (f32, f32, f32, f32),
-    ) -> bool {
+    fn segment_hits_rect(a: (f32, f32), b: (f32, f32), rect: (f32, f32, f32, f32)) -> bool {
         let (rx, ry, rw, rh) = rect;
         // Несколько проб вдоль отрезка.
         for i in 1..8 {

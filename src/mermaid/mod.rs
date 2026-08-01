@@ -7,6 +7,8 @@
 
 pub mod error;
 pub mod layout_fix;
+#[cfg(test)]
+mod layout_probe;
 pub mod limits;
 pub mod render;
 

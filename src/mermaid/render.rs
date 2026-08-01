@@ -28,7 +28,7 @@ use crate::svg;
 /// Остаточное отклонение: сам вызов `load_system_fonts()` внутри рендерера
 /// происходит один раз за процесс. Это чтение каталогов, результат которого
 /// не используется; убрать его можно только через upstream-API.
-const MEASUREMENT_FAMILY: &str = "mdpdf-diagram-sans";
+pub(crate) const MEASUREMENT_FAMILY: &str = "mdpdf-diagram-sans";
 
 /// Семейство, которым текст внутри SVG рисует уже Typst (ТЗ §34).
 const RENDER_FAMILY: &str = "Noto Sans";
@@ -87,14 +87,40 @@ pub fn render(source: &str) -> Result<RenderedDiagram, MermaidError> {
     Ok(rendered)
 }
 
-/// Собственно конвейер рендерера. Вызывается только под `catch_unwind`.
-fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
+/// Тема раскладки: шрифт — служебное несуществующее семейство
+/// [`MEASUREMENT_FAMILY`], чтобы метрика текста была табличной и не
+/// зависела от системных шрифтов (ТЗ §10.5.4).
+pub(crate) fn measurement_theme() -> Theme {
     let mut theme = Theme::modern();
     theme.font_family = MEASUREMENT_FAMILY.to_owned();
-    let layout_config = LayoutConfig {
+    theme
+}
+
+/// Конфиг раскладки: табличные (быстрые) метрики текста, остальное —
+/// по умолчанию рендерера.
+pub(crate) fn measurement_layout_config() -> LayoutConfig {
+    LayoutConfig {
         fast_text_metrics: true,
         ..LayoutConfig::default()
-    };
+    }
+}
+
+/// Разбор и раскладка без пост-правок — базовая линия рендерера,
+/// с которой тесты сравнивают [`layout_fix`](crate::mermaid::layout_fix).
+#[cfg(test)]
+pub(crate) fn layout_of(source: &str) -> Layout {
+    let parsed = parse_mermaid_strict(source).expect("parse");
+    compute_layout(
+        &parsed.graph,
+        &measurement_theme(),
+        &measurement_layout_config(),
+    )
+}
+
+/// Собственно конвейер рендерера. Вызывается только под `catch_unwind`.
+fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
+    let theme = measurement_theme();
+    let layout_config = measurement_layout_config();
 
     let parsed = parse_mermaid_strict(source).map_err(|error| MermaidError::Render {
         message: error.to_string(),
@@ -133,8 +159,8 @@ fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
 ///
 /// Для остальных типов диаграмм якорь сохраняется: там формула по умолчанию
 /// привязана к первой точке ребра, а не к середине, и снятие якоря сделало бы
-/// хуже. Дефект раскладки подписей flowchart (наложение подписи на узел)
-/// этим не лечится — он остаётся известным ограничением.
+/// хуже. Наложение подписей flowchart на узлы лечится отдельно — избирательной
+/// перестановкой конфликтующих подписей в [`layout_fix`].
 fn drop_sequence_label_anchors(layout: &mut Layout) {
     if layout.kind != DiagramKind::Sequence {
         return;
