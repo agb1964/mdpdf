@@ -259,6 +259,38 @@ fn page_count_grows_with_the_document() {
     );
 }
 
+/// Подписи диаграммы живут внутри SVG, а рисует их Typst встроенным шрифтом
+/// (ТЗ §10.5, §34). Если бы семейство не разрешилось, usvg **молча** выбросил
+/// бы текстовые узлы: PDF собрался бы, диаграмма выглядела бы как набор пустых
+/// рамок, и ни один структурный факт этого бы не заметил.
+///
+/// Документ намеренно состоит из одной диаграммы и не содержит собственного
+/// текста — иначе шрифт попал бы в PDF из заголовка, а не из подписей.
+#[test]
+fn cyrillic_diagram_labels_reach_the_pdf() {
+    let markdown = "```mermaid\ngraph TD\n    A[Начало] --> B[Конец]\n```\n";
+    let facts = extract_facts(&compile_with(markdown, RenderOptions::default()));
+
+    assert!(
+        facts
+            .embedded_fonts
+            .iter()
+            .any(|font| font.contains("NotoSans")),
+        "в PDF из одной диаграммы нет встроенного шрифта — подписи потеряны: {:?}",
+        facts.embedded_fonts
+    );
+}
+
+/// Typst рисует SVG векторно, а не как Image XObject, поэтому диаграммы
+/// не увеличивают `image_count`. Тест фиксирует это как ожидаемое свойство:
+/// иначе эталон `image_count: 0` для `mermaid.md` выглядел бы ошибкой.
+#[test]
+fn diagrams_are_vector_content_not_image_xobjects() {
+    let markdown = "```mermaid\ngraph TD\n    A --> B\n```\n";
+    let facts = extract_facts(&compile_with(markdown, RenderOptions::default()));
+    assert_eq!(facts.image_count, 0);
+}
+
 /// Размер страницы из `--paper` должен доходить до PDF, а не оставаться
 /// параметром на бумаге. A4 — 595×842 pt, US Letter — 612×792 pt (§20.1).
 #[test]

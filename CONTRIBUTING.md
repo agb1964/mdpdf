@@ -12,7 +12,7 @@
 ```bash
 git clone https://github.com/agb1964/mdpdf.git
 cd mdpdf
-cargo build
+cargo build --locked
 ```
 
 Для полного набора локальных проверок установите `cargo-deny`:
@@ -65,7 +65,10 @@ rustup toolchain install nightly
 6. Проверьте `git diff --check` и просмотрите итоговый diff.
 
 `make ci` запускает форматирование, `cargo check`, Clippy, тесты, rustdoc и
-`cargo deny`. Coverage остаётся информационным показателем:
+`cargo deny`. Все Cargo-команды, входящие в обязательные проверки, используют
+закоммиченный `Cargo.lock`. В pull request GitHub повторяет этот gate на одном
+Ubuntu runner; платформенные сборки выполняются только release workflow по
+version tag. Coverage остаётся информационным показателем:
 
 ```bash
 make coverage

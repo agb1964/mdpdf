@@ -168,7 +168,9 @@ mod tests {
         let resources = crate::compiler::files::resolve_resources(
             &[crate::typst_gen::generator::ResourceReference {
                 logical_path: "/mdpdf-resources/000001.png".to_owned(),
-                source_path: "a.png".to_owned(),
+                source: crate::typst_gen::generator::ResourceSource::File {
+                    path: "a.png".to_owned(),
+                },
                 kind: crate::typst_gen::generator::ResourceKind::Image,
                 span: None,
             }],

@@ -40,8 +40,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "fuzz_mermaid_parser"
-path = "fuzz_targets/fuzz_mermaid_parser.rs"
+name = "fuzz_mermaid_render"
+path = "fuzz_targets/fuzz_mermaid_render.rs"
 test = false
 doc = false
 bench = false

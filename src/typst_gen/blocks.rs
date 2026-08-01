@@ -3,11 +3,11 @@
 //! Всё выводится типизированными вызовами функций шаблона; ручная строковая
 //! Typst-разметка не используется.
 
-use crate::ast::Spanned;
 use crate::ast::block::{
     Alignment, Block, CodeBlock, Heading, List, ListItem, ListKind, Table, TableRow,
 };
-use crate::typst_gen::diagram::diagram_expression;
+use crate::ast::{SourceSpan, Spanned};
+use crate::typst_gen::diagram::{DiagramError, diagram_expression};
 use crate::typst_gen::error::TypstGenerationError;
 use crate::typst_gen::escape::string_literal;
 use crate::typst_gen::generator::{RenderOptions, ResourceReference};
@@ -53,7 +53,9 @@ pub fn block_expression(
         Block::Paragraph(paragraph) => {
             format!("par({})", inline_expression(&paragraph.content, resources)?)
         }
-        Block::CodeBlock(code) => code_expression(code, options, warnings),
+        Block::CodeBlock(code) => {
+            code_expression(code, Some(block.span), resources, options, warnings)?
+        }
         Block::Quote(quote) => {
             format!(
                 "mdpdf-quote({})",
@@ -104,13 +106,16 @@ fn heading_expression(
 /// с предупреждением, сборка не рвётся.
 fn code_expression(
     code: &CodeBlock,
+    span: Option<SourceSpan>,
+    resources: &mut Vec<ResourceReference>,
     options: &RenderOptions,
     warnings: &mut Vec<String>,
-) -> String {
+) -> Result<String, TypstGenerationError> {
     if code.language.as_deref() == Some("mermaid") {
-        match diagram_expression(code, options) {
-            Ok(expression) => return expression,
-            Err(error) => warnings.push(format!(
+        match diagram_expression(code, span, resources, options) {
+            Ok(expression) => return Ok(expression),
+            Err(DiagramError::Generation(error)) => return Err(error),
+            Err(DiagramError::Mermaid(error)) => warnings.push(format!(
                 "mermaid diagram is not rendered ({error}); the block is shown as code"
             )),
         }
@@ -119,10 +124,10 @@ fn code_expression(
         .language
         .as_deref()
         .map_or_else(|| "none".to_owned(), string_literal);
-    format!(
+    Ok(format!(
         "mdpdf-code(language: {language}, body: {})",
         string_literal(&code.code)
-    )
+    ))
 }
 
 /// Список (ТЗ §24.9). Символы ☐ и ☑ в Rust-коде не появляются: состояние

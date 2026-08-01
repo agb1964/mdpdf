@@ -26,6 +26,7 @@ pub mod markdown;
 pub mod mermaid;
 pub mod output;
 pub mod source;
+pub mod svg;
 pub mod typst_gen;
 
 use std::process::ExitCode;

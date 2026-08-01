@@ -1,77 +1,156 @@
-# Отдельный автономный бинарник на каждую платформу из ТЗ §21.
+# Платформенные архивы создаются только для version tag v<package.version>.
 
 name: Release
 
 on:
   push:
     tags: ["v*"]
-  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
 
 jobs:
+  verify:
+    name: verify tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Match tag to package version
+        shell: bash
+        run: |
+          package_id="$(cargo pkgid --locked --manifest-path Cargo.toml)"
+          version="${package_id##*@}"
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Check
+        run: cargo check --locked --all-targets --all-features
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --all-targets --all-features
+
+      - name: Documentation
+        run: cargo doc --locked --no-deps --all-features
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
   build:
     name: ${{ matrix.target }}
+    needs: verify
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: aarch64-apple-darwin
             os: macos-latest
+            archive: tar.gz
           - target: x86_64-apple-darwin
             os: macos-latest
+            archive: tar.gz
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            archive: tar.gz
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
+            archive: tar.gz
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            archive: zip
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
 
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --locked --release --target ${{ matrix.target }}
 
-      - name: Package (unix)
+      - name: Package
         if: runner.os != 'Windows'
+        shell: bash
         run: |
-          mkdir -p dist
-          tar -czf "dist/mdpdf-${{ matrix.target }}.tar.gz" \
-            -C "target/${{ matrix.target }}/release" mdpdf
-          cp assets/fonts/OFL.txt assets/fonts/LICENSE-NotoColorEmoji.txt \
-            LICENSE-MIT LICENSE-APACHE dist/
+          archive="mdpdf-${{ matrix.target }}"
+          mkdir -p "dist/$archive"
+          cp "target/${{ matrix.target }}/release/mdpdf" "dist/$archive/"
+          cp LICENSE-MIT "dist/$archive/"
+          cp assets/fonts/OFL.txt assets/fonts/LICENSE-NotoColorEmoji.txt "dist/$archive/"
+          tar -C dist -czf "dist/$archive.tar.gz" "$archive"
 
-      - name: Package (windows)
+      - name: Package
         if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          mkdir dist
-          Compress-Archive -Path "target/${{ matrix.target }}/release/mdpdf.exe" `
-            -DestinationPath "dist/mdpdf-${{ matrix.target }}.zip"
+          $archive = "mdpdf-${{ matrix.target }}"
+          New-Item -ItemType Directory -Path "dist/$archive"
+          Copy-Item "target/${{ matrix.target }}/release/mdpdf.exe" "dist/$archive/"
+          Copy-Item LICENSE-MIT "dist/$archive/"
+          Copy-Item assets/fonts/OFL.txt, assets/fonts/LICENSE-NotoColorEmoji.txt "dist/$archive/"
+          Compress-Archive -Path "dist/$archive" -DestinationPath "dist/$archive.zip"
 
       - uses: actions/upload-artifact@v7
         with:
           name: mdpdf-${{ matrix.target }}
-          path: dist/*
+          path: dist/*.${{ matrix.archive }}
+          if-no-files-found: error
+          retention-days: 1
 
   publish:
     name: publish release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+
+      - name: Create checksums
+        working-directory: dist
+        run: sha256sum mdpdf-* > SHA256SUMS
+
       - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
+          fail_on_unmatched_files: true
           generate_release_notes: true

@@ -4,10 +4,10 @@
 //! в строковый литерал. Ни один фрагмент не попадает в markup как есть (ТЗ §22).
 
 use crate::ast::inline::Inline;
-use crate::typst_gen::RESOURCE_PREFIX;
 use crate::typst_gen::error::TypstGenerationError;
 use crate::typst_gen::escape::{path_literal, string_literal, url_literal};
-use crate::typst_gen::generator::{ResourceKind, ResourceReference};
+use crate::typst_gen::generator::{ResourceKind, ResourceReference, ResourceSource};
+use crate::typst_gen::next_logical_path;
 
 /// Пустое содержимое Typst.
 pub const EMPTY_CONTENT: &str = "[]";
@@ -116,12 +116,13 @@ fn register_image(
         });
     }
 
-    let index = resources.len() + 1;
-    let logical_path = format!("{RESOURCE_PREFIX}{index:06}.{}", extension_of(source));
+    let logical_path = next_logical_path(resources, "", &extension_of(source));
 
     resources.push(ResourceReference {
         logical_path: logical_path.clone(),
-        source_path: source.to_owned(),
+        source: ResourceSource::File {
+            path: source.to_owned(),
+        },
         kind: ResourceKind::Image,
         span: Some(image.span),
     });
@@ -224,7 +225,7 @@ mod tests {
         assert!(expression.contains("/mdpdf-resources/000002.jpeg"));
         assert!(expression.contains("/mdpdf-resources/000003.img"));
         assert_eq!(resources.len(), 3);
-        assert_eq!(resources[0].source_path, "a/one.PNG");
+        assert_eq!(resources[0].display_path(), "a/one.PNG");
     }
 
     #[test]

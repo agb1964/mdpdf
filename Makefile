@@ -25,16 +25,16 @@ fmt-check: ## Проверить форматирование
 	$(CARGO) fmt --all --check
 
 check: ## cargo check
-	$(CARGO) check --all-targets --all-features
+	$(CARGO) check --locked --all-targets --all-features
 
 clippy: ## Линтер, предупреждения = ошибки
-	$(CARGO) clippy --all-targets --all-features -- -D warnings
+	$(CARGO) clippy --locked --all-targets --all-features -- -D warnings
 
 test: ## Тесты
-	$(CARGO) test --all-targets --all-features
+	$(CARGO) test --locked --all-targets --all-features
 
 doc: ## Документация без зависимостей
-	$(CARGO) doc --no-deps
+	$(CARGO) doc --locked --no-deps --all-features
 
 deny: ## Лицензии, advisories, источники зависимостей
 	$(CARGO) deny check
@@ -42,10 +42,10 @@ deny: ## Лицензии, advisories, источники зависимосте
 ## --- Сборка и запуск ---------------------------------------------------------
 
 build: ## Debug-сборка
-	$(CARGO) build
+	$(CARGO) build --locked
 
 release: ## Release-сборка
-	$(CARGO) build --release
+	$(CARGO) build --locked --release
 
 release-tag: ## Создать тег v<version из Cargo.toml> и отправить в remote
 	@set -eu; \
@@ -57,7 +57,7 @@ release-tag: ## Создать тег v<version из Cargo.toml> и отправ
 		echo "release-tag: нужна ветка $(RELEASE_BRANCH), сейчас '$${branch:-detached HEAD}'." >&2; \
 		exit 1; \
 	fi; \
-	if ! git diff --quiet || ! git diff --cached --quiet; then \
+	if [ -n "$$(git status --porcelain)" ]; then \
 		echo "release-tag: рабочее дерево не чистое; сначала закоммитьте версию и документацию." >&2; \
 		exit 1; \
 	fi; \
@@ -88,7 +88,7 @@ release-tag: ## Создать тег v<version из Cargo.toml> и отправ
 	echo "release-tag: $$tag опубликован в $(RELEASE_REMOTE)."
 
 run: build ## Запустить на тестовом документе (make run SAMPLE=path.md)
-	$(CARGO) run -- --verbose $(SAMPLE)
+	$(CARGO) run --locked -- --verbose $(SAMPLE)
 
 sample: ## Создать тестовый Markdown (путь в переменной SAMPLE)
 	@printf '# Заголовок\n\nТекст с **жирным** и *курсивом*.\n\n- пункт\n- пункт\n' > $(SAMPLE)
@@ -120,7 +120,7 @@ fuzz: ## Fuzzing, по $(FUZZ_TIME)с на таргет (ТЗ §19.4, требу
 		echo "      поставьте: cargo install cargo-fuzz"; \
 		exit 1; \
 	fi
-	@for target in fuzz_markdown_parser fuzz_typst_escape fuzz_ast_validation fuzz_mermaid_parser; do \
+	@for target in fuzz_markdown_parser fuzz_typst_escape fuzz_ast_validation fuzz_mermaid_render; do \
 		echo "== $$target: $(FUZZ_TIME)с =="; \
 		( cd fuzz && cargo +nightly fuzz run $$target -- -max_total_time=$(FUZZ_TIME) ) || exit 1; \
 	done

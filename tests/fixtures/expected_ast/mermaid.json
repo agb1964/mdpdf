@@ -110,7 +110,7 @@
           "level": "H2",
           "content": [
             {
-              "Text": "Деградация до кода"
+              "Text": "Subgraph, cylinder, note, alt"
             }
           ],
           "id": null
@@ -118,19 +118,154 @@
       },
       "span": {
         "start": 744,
-        "end": 782
+        "end": 777
       }
     },
     {
       "value": {
         "CodeBlock": {
           "language": "mermaid",
-          "code": "gantt\ntitle План работ"
+          "code": "graph LR\n    Client[\"Клиент<br/>снаружи\"] -->|HTTPS| API\n    subgraph Server[\"Сервер\"]\n        API[API] --> DB[(PostgreSQL)]\n        API --> Files[/файлы/]\n    end"
         }
       },
       "span": {
-        "start": 783,
-        "end": 829
+        "start": 778,
+        "end": 980
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "sequenceDiagram\n    participant App as Client\n    participant API as API\n    App->>API: login\n    Note over API: проверить подпись\n    alt ok\n        API-->>App: 200\n    else\n        API-->>App: 401\n    end"
+        }
+      },
+      "span": {
+        "start": 982,
+        "end": 1219
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Широкая диаграмма на альбомной странице"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 1221,
+        "end": 1299
+      }
+    },
+    {
+      "value": {
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "В книжной полосе набора такой ряд ужался бы до нечитаемого кегля,"
+            },
+            "SoftBreak",
+            {
+              "Text": "поэтому диаграмма выносится на отдельную альбомную страницу."
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 1300,
+        "end": 1534
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "flowchart LR\n    A[Первый модуль] --> B[Второй модуль] --> C[Третий модуль]\n    C --> D[Четвёртый модуль] --> E[Пятый модуль] --> F[Шестой модуль]\n    F --> G[Седьмой модуль] --> H[Восьмой модуль] --> I[Девятый модуль]"
+        }
+      },
+      "span": {
+        "start": 1535,
+        "end": 1881
+      }
+    },
+    {
+      "value": {
+        "Heading": {
+          "level": "H2",
+          "content": [
+            {
+              "Text": "Деградация до кода"
+            }
+          ],
+          "id": null
+        }
+      },
+      "span": {
+        "start": 1883,
+        "end": 1921
+      }
+    },
+    {
+      "value": {
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "Нераспознанный тип диаграммы."
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 1922,
+        "end": 1978
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "totallyNotADiagram\nA --> B"
+        }
+      },
+      "span": {
+        "start": 1979,
+        "end": 2020
+      }
+    },
+    {
+      "value": {
+        "Paragraph": {
+          "content": [
+            {
+              "Text": "Внешняя ссылка в выходном SVG запрещена политикой ресурсов (ТЗ §33.3),"
+            },
+            "SoftBreak",
+            {
+              "Text": "поэтому такая диаграмма тоже деградирует до кода."
+            }
+          ]
+        }
+      },
+      "span": {
+        "start": 2022,
+        "end": 2236
+      }
+    },
+    {
+      "value": {
+        "CodeBlock": {
+          "language": "mermaid",
+          "code": "flowchart TD\n    A[Ссылка] --> B[Конец]\n    click A \"https://example.com\""
+        }
+      },
+      "span": {
+        "start": 2237,
+        "end": 2336
       }
     }
   ]

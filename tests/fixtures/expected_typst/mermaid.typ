@@ -157,98 +157,27 @@
   line(length: 100%, stroke: 0.5pt + luma(180)),
 )
 
-// Диаграмма Mermaid (ТЗ §10.5). Координаты вычисляет детерминированная
-// Rust-раскладка, шаблон только рисует примитивы. Подписи приходят
-// строковыми значениями и не интерпретируются как Typst-код.
-// fit — масштаб вписывания в страницу: геометрия уже умножена на него
-// в Rust, здесь он сжимает текст, отступы, штрихи и стрелки.
-#let mdpdf-diagram(width: 0pt, height: 0pt, fit: 100%, boxes: (), lines: (), labels: ()) = {
-  let edge-color = luma(110)
-  let node-fill = luma(250)
-  let stroke-width = 0.7pt * fit
-  let node-stroke = stroke-width + luma(130)
+// Диаграмма Mermaid (ТЗ §10.5): SVG-ресурс, вписанный в текстовую область.
+// Ширину считает генератор — она уже учитывает поля страницы и бюджет
+// высоты, поэтому здесь никакой арифметики не остаётся.
+#let mdpdf-diagram(path: "", alt: none, width: 0pt) = block(
+  width: 100%, // иначе блок сжимается до ширины изображения и align(center) не работает
+  breakable: false,
+  above: 0.8em,
+  below: 0.8em,
+  align(center, image(path, alt: alt, width: width)),
+)
 
-  block(
-    width: 100%, // иначе блок сжимается до ширины box и align(center) не работает
-    breakable: false,
-    above: 0.8em,
-    below: 0.8em,
-    align(center, box(width: width, height: height, {
-      // Рёбра и линии жизни — под боксами.
-      for (x1, y1, x2, y2, style) in lines {
-        let stroke-spec = if style.starts-with("dashed") {
-          (paint: edge-color, thickness: stroke-width, dash: "dashed")
-        } else {
-          (paint: edge-color, thickness: stroke-width)
-        }
-        place(dx: x1, dy: y1, line(start: (0pt, 0pt), end: (x2 - x1, y2 - y1), stroke: stroke-spec))
-        if style != "plain" and style != "dashed" {
-          // Стрелка: треугольник на конце линии, вычисленный по направлению
-          // без поворотов (поворот вокруг точки требовал бы origin-трюков).
-          let dx = (x2 - x1) / 1pt
-          let dy = (y2 - y1) / 1pt
-          let len = calc.sqrt(dx * dx + dy * dy)
-          if len > 0 {
-            let ux = dx / len
-            let uy = dy / len
-            let nx = -uy
-            let ny = ux
-            let back = 7.0 * fit
-            let half = 3.5 * fit
-            let base1 = (x2 - (ux * back - nx * half) * 1pt, y2 - (uy * back - ny * half) * 1pt)
-            let base2 = (x2 - (ux * back + nx * half) * 1pt, y2 - (uy * back + ny * half) * 1pt)
-            place(polygon(
-              fill: if style.ends-with("filled-arrow") { edge-color } else { white },
-              stroke: stroke-width + edge-color,
-              (x2, y2),
-              base1,
-              base2,
-            ))
-          }
-        }
-      }
-      // Боксы.
-      for (x, y, w, h, label, shape) in boxes {
-        let body = align(center + horizon, text(size: 0.85em * fit, label))
-        place(dx: x, dy: y, if shape == "circle" {
-          ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        } else if shape == "rounded" {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body)
-        } else if shape == "diamond" {
-          polygon(
-            fill: node-fill,
-            stroke: node-stroke,
-            (w / 2, 0pt),
-            (w, h / 2),
-            (w / 2, h),
-            (0pt, h / 2),
-          )
-        } else {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        })
-        if shape == "diamond" {
-          place(dx: x, dy: y, box(width: w, height: h, body))
-        }
-      }
-      // Подписи рёбер — поверх линий, с белой подложкой. Прямоугольники
-      // посчитаны раскладкой: шаблон не измеряет текст, а рисует box
-      // заданной ширины в заданной точке (перенос по ширине делает Typst,
-      // разрывы длинных слов вставлены в текст нулевыми пробелами).
-      for (x, y, w, label) in labels {
-        place(
-          dx: x,
-          dy: y,
-          box(
-            width: w,
-            fill: white,
-            outset: 1.5pt * fit,
-            align(center, text(size: 0.7em * fit, fill: luma(60), label)),
-          ),
-        )
-      }
-    })),
-  )
-}
+// Широкая диаграмма на отдельной альбомной странице (ТЗ §10.5).
+// Решение принимает генератор: в книжной ориентации такая диаграмма
+// ужалась бы до нечитаемого кегля. Ширина снова приходит готовой —
+// она посчитана уже под альбомную полосу набора.
+// `page` со своими параметрами действует только на переданное содержимое,
+// последующий текст возвращается к книжной ориентации.
+#let mdpdf-diagram-landscape(path: "", alt: none, width: 0pt) = page(
+  flipped: true,
+  align(center + horizon, image(path, alt: alt, width: width)),
+)
 
 #show: mdpdf-document.with(
   paper: "a4",
@@ -265,17 +194,35 @@
 
   heading(level: 2, text("Flowchart"))
 
-  mdpdf-diagram(width: 161.12pt, height: 230.17pt, fit: 100%, boxes: ((52.76pt, 0pt, 55.6pt, 24.3pt, "Начало", "rect"), (30.8pt, 54.3pt, 99.52pt, 36.45pt, "Всё ок?", "diamond"), (0pt, 120.75pt, 82pt, 24.3pt, "Продолжаем", "rect"), (106pt, 120.75pt, 55.12pt, 55.12pt, "Стоп", "circle"), (56.06pt, 205.87pt, 49pt, 24.3pt, "Конец", "rounded")), lines: ((80.56pt, 24.3pt, 80.56pt, 54.3pt, "arrow"), (68.62pt, 90.75pt, 48.96pt, 120.75pt, "arrow"), (93.31pt, 90.75pt, 114.29pt, 120.75pt, "arrow"), (46.65pt, 145.05pt, 74.91pt, 205.87pt, "arrow"), (112.61pt, 175.87pt, 89.8pt, 205.87pt, "arrow")), labels: ((54.17pt, 100.75pt, 9.24pt, "да"), (96.87pt, 100.75pt, 13.86pt, "нет")))
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000001.svg", alt: "Mermaid diagram", width: 301.0482pt)
 
-  mdpdf-diagram(width: 200.4pt, height: 24.3pt, fit: 100%, boxes: ((0pt, 0pt, 49pt, 24.3pt, "alpha", "rect"), (79pt, 0pt, 42.4pt, 24.3pt, "beta", "rect"), (151.4pt, 0pt, 49pt, 24.3pt, "gamma", "rect")), lines: ((49pt, 12.15pt, 79pt, 12.15pt, "arrow"), (121.4pt, 12.15pt, 151.4pt, 12.15pt, "arrow")), labels: ())
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000002.svg", alt: "Mermaid diagram", width: 397.9086pt)
 
-  mdpdf-diagram(width: 183pt, height: 99.64pt, fit: 100%, boxes: ((80.2pt, 0pt, 22.6pt, 24.3pt, "A", "rect"), (80.2pt, 75.34pt, 22.6pt, 24.3pt, "B", "rect")), lines: ((91.5pt, 24.3pt, 91.5pt, 75.34pt, "arrow"),), labels: ((1.5pt, 29.8pt, 180pt, "очень длинная подпись ребра, которая не должна уезжать за пределы страницы, а переносится по ширине и резервирует себе место между узлами диаграммы"),))
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000003.svg", alt: "Mermaid diagram", width: 222.8439pt)
 
   heading(level: 2, text("Sequence"))
 
-  mdpdf-diagram(width: 151.2pt, height: 106.9pt, fit: 100%, boxes: ((0pt, 0pt, 55.6pt, 24.3pt, "Клиент", "rect"), (95.6pt, 0pt, 55.6pt, 24.3pt, "Сервер", "rect")), lines: ((27.8pt, 50.45pt, 123.4pt, 50.45pt, "filled-arrow"), (123.4pt, 82.75pt, 27.8pt, 82.75pt, "dashed-arrow"), (27.8pt, 24.3pt, 27.8pt, 106.9pt, "dashed"), (123.4pt, 24.3pt, 123.4pt, 106.9pt, "dashed")), labels: ((61.74pt, 45.44pt, 27.72pt, "запрос"), (64.05pt, 77.75pt, 23.1pt, "ответ")))
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000004.svg", alt: "Mermaid diagram", width: 450pt)
+
+  heading(level: 2, text("Subgraph, cylinder, note, alt"))
+
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000005.svg", alt: "Mermaid diagram", width: 481.8897pt)
+
+  mdpdf-diagram(path: "/mdpdf-resources/mermaid-000006.svg", alt: "Mermaid diagram", width: 450pt)
+
+  heading(level: 2, text("Широкая диаграмма на альбомной странице"))
+
+  par(text("В книжной полосе набора такой ряд ужался бы до нечитаемого кегля,") + text(" ") + text("поэтому диаграмма выносится на отдельную альбомную страницу."))
+
+  mdpdf-diagram-landscape(path: "/mdpdf-resources/mermaid-000007.svg", alt: "Mermaid diagram", width: 728.5039pt)
 
   heading(level: 2, text("Деградация до кода"))
 
-  mdpdf-code(language: "mermaid", body: "gantt\ntitle План работ")
+  par(text("Нераспознанный тип диаграммы."))
+
+  mdpdf-code(language: "mermaid", body: "totallyNotADiagram\nA --> B")
+
+  par(text("Внешняя ссылка в выходном SVG запрещена политикой ресурсов (ТЗ §33.3),") + text(" ") + text("поэтому такая диаграмма тоже деградирует до кода."))
+
+  mdpdf-code(language: "mermaid", body: "flowchart TD\n    A[Ссылка] --> B[Конец]\n    click A \"https://example.com\"")
 }

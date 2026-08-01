@@ -157,95 +157,24 @@
   line(length: 100%, stroke: 0.5pt + luma(180)),
 )
 
-// Диаграмма Mermaid (ТЗ §10.5). Координаты вычисляет детерминированная
-// Rust-раскладка, шаблон только рисует примитивы. Подписи приходят
-// строковыми значениями и не интерпретируются как Typst-код.
-// fit — масштаб вписывания в страницу: геометрия уже умножена на него
-// в Rust, здесь он сжимает текст, отступы, штрихи и стрелки.
-#let mdpdf-diagram(width: 0pt, height: 0pt, fit: 100%, boxes: (), lines: (), labels: ()) = {
-  let edge-color = luma(110)
-  let node-fill = luma(250)
-  let stroke-width = 0.7pt * fit
-  let node-stroke = stroke-width + luma(130)
+// Диаграмма Mermaid (ТЗ §10.5): SVG-ресурс, вписанный в текстовую область.
+// Ширину считает генератор — она уже учитывает поля страницы и бюджет
+// высоты, поэтому здесь никакой арифметики не остаётся.
+#let mdpdf-diagram(path: "", alt: none, width: 0pt) = block(
+  width: 100%, // иначе блок сжимается до ширины изображения и align(center) не работает
+  breakable: false,
+  above: 0.8em,
+  below: 0.8em,
+  align(center, image(path, alt: alt, width: width)),
+)
 
-  block(
-    width: 100%, // иначе блок сжимается до ширины box и align(center) не работает
-    breakable: false,
-    above: 0.8em,
-    below: 0.8em,
-    align(center, box(width: width, height: height, {
-      // Рёбра и линии жизни — под боксами.
-      for (x1, y1, x2, y2, style) in lines {
-        let stroke-spec = if style.starts-with("dashed") {
-          (paint: edge-color, thickness: stroke-width, dash: "dashed")
-        } else {
-          (paint: edge-color, thickness: stroke-width)
-        }
-        place(dx: x1, dy: y1, line(start: (0pt, 0pt), end: (x2 - x1, y2 - y1), stroke: stroke-spec))
-        if style != "plain" and style != "dashed" {
-          // Стрелка: треугольник на конце линии, вычисленный по направлению
-          // без поворотов (поворот вокруг точки требовал бы origin-трюков).
-          let dx = (x2 - x1) / 1pt
-          let dy = (y2 - y1) / 1pt
-          let len = calc.sqrt(dx * dx + dy * dy)
-          if len > 0 {
-            let ux = dx / len
-            let uy = dy / len
-            let nx = -uy
-            let ny = ux
-            let back = 7.0 * fit
-            let half = 3.5 * fit
-            let base1 = (x2 - (ux * back - nx * half) * 1pt, y2 - (uy * back - ny * half) * 1pt)
-            let base2 = (x2 - (ux * back + nx * half) * 1pt, y2 - (uy * back + ny * half) * 1pt)
-            place(polygon(
-              fill: if style.ends-with("filled-arrow") { edge-color } else { white },
-              stroke: stroke-width + edge-color,
-              (x2, y2),
-              base1,
-              base2,
-            ))
-          }
-        }
-      }
-      // Боксы.
-      for (x, y, w, h, label, shape) in boxes {
-        let body = align(center + horizon, text(size: 0.85em * fit, label))
-        place(dx: x, dy: y, if shape == "circle" {
-          ellipse(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        } else if shape == "rounded" {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, radius: 4pt * fit, inset: 2pt * fit, body)
-        } else if shape == "diamond" {
-          polygon(
-            fill: node-fill,
-            stroke: node-stroke,
-            (w / 2, 0pt),
-            (w, h / 2),
-            (w / 2, h),
-            (0pt, h / 2),
-          )
-        } else {
-          rect(width: w, height: h, fill: node-fill, stroke: node-stroke, inset: 2pt * fit, body)
-        })
-        if shape == "diamond" {
-          place(dx: x, dy: y, box(width: w, height: h, body))
-        }
-      }
-      // Подписи рёбер — поверх линий, с белой подложкой. Прямоугольники
-      // посчитаны раскладкой: шаблон не измеряет текст, а рисует box
-      // заданной ширины в заданной точке (перенос по ширине делает Typst,
-      // разрывы длинных слов вставлены в текст нулевыми пробелами).
-      for (x, y, w, label) in labels {
-        place(
-          dx: x,
-          dy: y,
-          box(
-            width: w,
-            fill: white,
-            outset: 1.5pt * fit,
-            align(center, text(size: 0.7em * fit, fill: luma(60), label)),
-          ),
-        )
-      }
-    })),
-  )
-}
+// Широкая диаграмма на отдельной альбомной странице (ТЗ §10.5).
+// Решение принимает генератор: в книжной ориентации такая диаграмма
+// ужалась бы до нечитаемого кегля. Ширина снова приходит готовой —
+// она посчитана уже под альбомную полосу набора.
+// `page` со своими параметрами действует только на переданное содержимое,
+// последующий текст возвращается к книжной ориентации.
+#let mdpdf-diagram-landscape(path: "", alt: none, width: 0pt) = page(
+  flipped: true,
+  align(center + horizon, image(path, alt: alt, width: width)),
+)

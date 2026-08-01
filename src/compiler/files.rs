@@ -8,9 +8,10 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
+use crate::ast::SourceSpan;
 use crate::compiler::error::CompileError;
 use crate::compiler::limits;
-use crate::typst_gen::generator::ResourceReference;
+use crate::typst_gen::generator::{ResourceReference, ResourceSource};
 
 /// Формат изображения, определённый по содержимому (ТЗ §33.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,12 +95,36 @@ pub fn resolve_resources(
         });
     }
 
-    let root = canonical_root(base_dir, document)?;
+    // Каталог документа канонизируется лениво: документ, состоящий из одних
+    // диаграмм, файловую систему не трогает вовсе (ТЗ §10.5.3).
+    let mut root: Option<PathBuf> = None;
     let mut resolved = ResolvedResources::default();
     let mut total_bytes: usize = 0;
 
     for resource in resources {
-        let bytes = read_resource(resource, &root)?;
+        let bytes = match &resource.source {
+            ResourceSource::Embedded { bytes } => bytes.clone(),
+            ResourceSource::File { path } => {
+                let root = match root {
+                    Some(ref root) => root.as_path(),
+                    None => root.insert(canonical_root(base_dir, document)?).as_path(),
+                };
+                read_resource(path, resource.span, root)?
+            }
+        };
+
+        // Пер-ресурсный лимит проверяется здесь, чтобы одинаково действовать
+        // и на файлы, и на порождённые байты (ТЗ §40). Для файлов дешёвая
+        // проверка по метаданным дополнительно отсекает чтение целиком.
+        if bytes.len() > limits::MAX_IMAGE_BYTES {
+            return Err(CompileError::LimitExceeded {
+                message: format!(
+                    "image {} is larger than {} bytes",
+                    resource.display_path(),
+                    limits::MAX_IMAGE_BYTES
+                ),
+            });
+        }
         total_bytes = total_bytes.saturating_add(bytes.len());
         if total_bytes > limits::MAX_TOTAL_IMAGE_BYTES {
             return Err(CompileError::LimitExceeded {
@@ -112,7 +137,7 @@ pub fn resolve_resources(
 
         // Формат проверяется до вызова Typst, чтобы ошибка была понятной (ТЗ §33.3).
         let format = detect_format(&bytes).ok_or_else(|| CompileError::Image {
-            path: resource.source_path.clone(),
+            path: resource.display_path().to_owned(),
             span: resource.span,
             message: "unsupported image format: expected PNG, JPEG, GIF or SVG".to_owned(),
         })?;
@@ -120,12 +145,13 @@ pub fn resolve_resources(
         // SVG «без внешних ресурсов» (см. документацию модуля) проверяется
         // отдельно: формат определяется по одному тегу `<svg`, но сам файл
         // может содержать ссылку на сеть или на произвольный локальный файл
-        // (ТЗ §33.3, code-analysis §5).
+        // (ТЗ §33.3, code-analysis §5). Политика одна и та же для картинок
+        // с диска и для SVG, порождённого рендерером Mermaid.
         if format == ImageFormat::Svg
-            && let Some(reference) = svg_external_reference(&bytes)
+            && let Some(reference) = crate::svg::external_reference(&bytes)
         {
             return Err(CompileError::Image {
-                path: resource.source_path.clone(),
+                path: resource.display_path().to_owned(),
                 span: resource.span,
                 message: format!(
                     "SVG references an external resource ({reference}), which is not allowed"
@@ -151,17 +177,20 @@ fn canonical_root(base_dir: &Path, document: &str) -> Result<PathBuf, CompileErr
 }
 
 /// Читает один файл с проверками ТЗ §33.1 и §33.2.
-fn read_resource(resource: &ResourceReference, root: &Path) -> Result<Vec<u8>, CompileError> {
-    let source_path = resource.source_path.as_str();
+fn read_resource(
+    source_path: &str,
+    span: Option<SourceSpan>,
+    root: &Path,
+) -> Result<Vec<u8>, CompileError> {
     let relative = Path::new(source_path);
     let access = |message: &str| CompileError::ResourceAccess {
         path: source_path.to_owned(),
-        span: resource.span,
+        span,
         message: message.to_owned(),
     };
     let image = |message: String| CompileError::Image {
         path: source_path.to_owned(),
-        span: resource.span,
+        span,
         message,
     };
 
@@ -236,82 +265,9 @@ pub fn detect_format(bytes: &[u8]) -> Option<ImageFormat> {
     if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
         return Some(ImageFormat::Gif);
     }
-    if looks_like_svg(bytes) {
+    if crate::svg::looks_like_svg(bytes) {
         return Some(ImageFormat::Svg);
     }
-    None
-}
-
-fn looks_like_svg(bytes: &[u8]) -> bool {
-    let head = &bytes[..bytes.len().min(1024)];
-    let Ok(text) = std::str::from_utf8(head) else {
-        return false;
-    };
-    let text = text.trim_start_matches('\u{feff}').trim_start();
-    text.starts_with("<svg") || (text.starts_with("<?xml") && text.contains("<svg"))
-}
-
-/// Схемы, запрещённые в `href`/`xlink:href` внутри SVG (ТЗ §33.3).
-///
-/// `data:` запрещена наравне с сетевыми и файловыми схемами: это тоже способ
-/// протащить произвольный, неограниченный по размеру и неучтённый лимитами
-/// (ТЗ §40) блок байт в обход проверки самого файла-изображения.
-const FORBIDDEN_SVG_SCHEMES: &[&str] = &["http:", "https:", "file:", "data:"];
-
-/// Ищет в SVG ссылку на внешний ресурс через `href`/`xlink:href`.
-///
-/// Полноценный XML-парсер здесь не нужен (задача прямо это исключает):
-/// достаточно построчного поиска атрибута и разбора значения в кавычках —
-/// SVG с легитимным локальным содержимым (например, `tests/fixtures/images/dot.svg`)
-/// такого атрибута вообще не содержит. Возвращает значение атрибута для
-/// сообщения об ошибке.
-fn svg_external_reference(bytes: &[u8]) -> Option<String> {
-    let text = String::from_utf8_lossy(bytes);
-    let lower = text.to_lowercase();
-    let bytes = lower.as_bytes();
-
-    let mut search_from = 0usize;
-    while let Some(found) = lower[search_from..].find("href") {
-        let href_start = search_from + found;
-        let after_href = href_start + "href".len();
-
-        // Между `href` и `=` допускаются пробелы (`href = "..."`).
-        let mut cursor = after_href;
-        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-            cursor += 1;
-        }
-        if bytes.get(cursor) != Some(&b'=') {
-            search_from = after_href;
-            continue;
-        }
-        cursor += 1;
-        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-            cursor += 1;
-        }
-
-        let Some(&quote) = bytes.get(cursor) else {
-            break;
-        };
-        if quote != b'"' && quote != b'\'' {
-            search_from = after_href;
-            continue;
-        }
-        let value_start = cursor + 1;
-        let Some(value_end) = lower[value_start..].find(quote as char) else {
-            break;
-        };
-        let value = lower[value_start..value_start + value_end].trim();
-
-        if FORBIDDEN_SVG_SCHEMES
-            .iter()
-            .any(|scheme| value.starts_with(scheme))
-        {
-            return Some(value.to_owned());
-        }
-
-        search_from = value_start + value_end;
-    }
-
     None
 }
 
@@ -326,9 +282,22 @@ mod tests {
     fn reference(source: &str, logical: &str) -> ResourceReference {
         ResourceReference {
             logical_path: logical.to_owned(),
-            source_path: source.to_owned(),
+            source: ResourceSource::File {
+                path: source.to_owned(),
+            },
             kind: ResourceKind::Image,
             span: Some(SourceSpan::new(0, 1)),
+        }
+    }
+
+    fn embedded(bytes: &[u8], logical: &str) -> ResourceReference {
+        ResourceReference {
+            logical_path: logical.to_owned(),
+            source: ResourceSource::Embedded {
+                bytes: bytes.to_vec(),
+            },
+            kind: ResourceKind::Image,
+            span: None,
         }
     }
 
@@ -352,49 +321,101 @@ mod tests {
         assert_eq!(detect_format(b""), None);
     }
 
+    // Проверки самого сканера SVG живут в `crate::svg`; здесь — только его
+    // применение внутри разрешения ресурсов.
+
     #[test]
-    fn svg_with_no_href_has_no_external_reference() {
-        assert_eq!(
-            svg_external_reference(b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle/></svg>"),
-            None
+    fn embedded_bytes_are_accepted_without_touching_the_filesystem() {
+        // Каталог документа заведомо не существует: встроенный ресурс не
+        // обязан его канонизировать.
+        let resolved = resolve_resources(
+            &[embedded(
+                b"<svg xmlns=\"http://www.w3.org/2000/svg\"><circle/></svg>",
+                "/mdpdf-resources/mermaid-000001.svg",
+            )],
+            Path::new("/definitely/missing/directory"),
+            "doc.md",
+        )
+        .expect("embedded resource resolves");
+
+        assert_eq!(resolved.len(), 1);
+        assert!(
+            resolved
+                .get("/mdpdf-resources/mermaid-000001.svg")
+                .is_some_and(|bytes| bytes.starts_with(b"<svg"))
         );
     }
 
     #[test]
-    fn svg_with_a_local_fragment_href_is_allowed() {
-        assert_eq!(
-            svg_external_reference(
-                b"<svg><use href=\"#icon\"/><use xlink:href=\"local.svg#a\"/></svg>"
-            ),
-            None
+    fn an_embedded_svg_with_an_external_reference_is_rejected() {
+        let err = resolve_resources(
+            &[embedded(
+                b"<svg><image href=\"https://example.com/a.png\"/></svg>",
+                "/mdpdf-resources/mermaid-000001.svg",
+            )],
+            Path::new("/definitely/missing/directory"),
+            "doc.md",
+        )
+        .expect_err("external reference is rejected");
+
+        assert!(
+            matches!(&err, CompileError::Image { message, .. } if message.contains("external")),
+            "unexpected error: {err:?}"
         );
     }
 
     #[test]
-    fn svg_referencing_http_is_rejected() {
-        let value =
-            svg_external_reference(b"<svg><image href=\"http://example.com/a.png\"/></svg>");
-        assert_eq!(value.as_deref(), Some("http://example.com/a.png"));
+    fn an_embedded_resource_of_an_unknown_format_is_rejected() {
+        let err = resolve_resources(
+            &[embedded(
+                b"definitely not an image",
+                "/mdpdf-resources/x.svg",
+            )],
+            Path::new("/definitely/missing/directory"),
+            "doc.md",
+        )
+        .expect_err("unknown format is rejected");
+
+        assert!(matches!(err, CompileError::Image { .. }), "{err:?}");
     }
 
     #[test]
-    fn svg_referencing_https_via_xlink_href_is_rejected() {
-        let value =
-            svg_external_reference(b"<svg><image xlink:href=\"https://example.com/a.png\"/></svg>");
-        assert_eq!(value.as_deref(), Some("https://example.com/a.png"));
+    fn embedded_resources_share_the_total_size_limit() {
+        let mut svg = Vec::from(b"<svg>".as_slice());
+        svg.resize(limits::MAX_IMAGE_BYTES / 2 + 1, b' ');
+
+        let err = resolve_resources(
+            &[
+                embedded(&svg, "/mdpdf-resources/mermaid-000001.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000002.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000003.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000004.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000005.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000006.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000007.svg"),
+                embedded(&svg, "/mdpdf-resources/mermaid-000008.svg"),
+            ],
+            Path::new("/definitely/missing/directory"),
+            "doc.md",
+        )
+        .expect_err("total limit applies to embedded bytes too");
+
+        assert!(matches!(err, CompileError::LimitExceeded { .. }), "{err:?}");
     }
 
     #[test]
-    fn svg_referencing_a_local_file_scheme_is_rejected() {
-        let value = svg_external_reference(b"<svg><image href=\"file:///etc/passwd\"/></svg>");
-        assert_eq!(value.as_deref(), Some("file:///etc/passwd"));
-    }
+    fn an_oversized_embedded_resource_is_rejected() {
+        let mut svg = Vec::from(b"<svg>".as_slice());
+        svg.resize(limits::MAX_IMAGE_BYTES + 1, b' ');
 
-    #[test]
-    fn svg_referencing_a_data_uri_is_rejected() {
-        let value =
-            svg_external_reference(b"<svg><image href=\"data:image/png;base64,AAAA\"/></svg>");
-        assert_eq!(value.as_deref(), Some("data:image/png;base64,aaaa"));
+        let err = resolve_resources(
+            &[embedded(&svg, "/mdpdf-resources/mermaid-000001.svg")],
+            Path::new("/definitely/missing/directory"),
+            "doc.md",
+        )
+        .expect_err("per-resource limit applies to embedded bytes too");
+
+        assert!(matches!(err, CompileError::LimitExceeded { .. }), "{err:?}");
     }
 
     #[test]
