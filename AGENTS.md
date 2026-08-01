@@ -49,10 +49,10 @@ make ci
 
 ```bash
 cargo fmt --all --check
-cargo check --all-targets --all-features
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all-targets --all-features
-cargo doc --no-deps
+cargo check --locked --all-targets --all-features
+cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo test --locked --all-targets --all-features
+cargo doc --locked --no-deps --all-features
 cargo deny check
 ```
 

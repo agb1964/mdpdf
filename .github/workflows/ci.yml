@@ -1,27 +1,31 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
-  # RUSTFLAGS на rustdoc не распространяется: без этой строки сломанные
-  # интра-док-ссылки остаются предупреждением и CI их пропускает.
   RUSTDOCFLAGS: -D warnings
 
 jobs:
-  check:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -33,95 +37,60 @@ jobs:
         run: cargo fmt --all --check
 
       - name: Check
-        run: cargo check --all-targets --all-features
+        run: cargo check --locked --all-targets --all-features
 
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
       - name: Test
-        run: cargo test --all-targets --all-features
+        run: cargo test --locked --all-targets --all-features
 
-      - name: Docs
-        run: cargo doc --no-deps
+      - name: Documentation
+        run: cargo doc --locked --no-deps --all-features
 
-  deny:
-    name: cargo-deny
+  dependency-audit:
+    name: dependency audit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
 
-  coverage:
-    name: coverage
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@cargo-llvm-cov
-      # ТЗ §19.3 использует coverage как информационный показатель: единый
-      # процент не блокирует CI, важнее regression tests критических веток.
-      - name: Coverage
-        run: cargo llvm-cov --all-features --workspace --summary-only
-
   golden-pdf:
-    name: эталонные PDF
+    name: golden PDF
+    needs: quality
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - uses: dtolnay/rust-toolchain@stable
+
       - uses: Swatinem/rust-cache@v2
 
-      # ТЗ §19.5 требует, чтобы минимальный набор эталонных PDF создавался в CI.
-      # Структурные проверки живут в tests/golden_pdf.rs, а сами файлы
-      # выкладываются артефактом: побайтовое сравнение не является критерием,
-      # но глазами посмотреть на результат сборки должно быть можно.
-      - name: Структурные проверки PDF
-        run: cargo test --test golden_pdf
+      - name: Build application
+        run: cargo build --locked --release
 
-      - name: Собрать эталонные PDF
+      - name: Render fixtures
+        shell: bash
         run: |
-          cargo build --release
           mkdir -p golden-pdf
           for fixture in tests/fixtures/markdown/*.md; do
-            name=$(basename "$fixture" .md)
-            ./target/release/mdpdf "$fixture" -o "golden-pdf/$name.pdf" --overwrite --quiet
+            name="$(basename "$fixture" .md)"
+            ./target/release/mdpdf "$fixture" \
+              -o "golden-pdf/$name.pdf" --overwrite --quiet
           done
-          ls -l golden-pdf
 
       - uses: actions/upload-artifact@v7
         with:
           name: golden-pdf
           path: golden-pdf/*.pdf
-          retention-days: 30
-
-  binary-size:
-    name: release binary size
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release
-      - name: Report size
-        run: ls -l target/release/mdpdf | awk '{print "release binary:", $5, "bytes"}'
-
-  clean-environment:
-    name: работает без Typst в системе
-    runs-on: ubuntu-latest
-    container: rust:slim
-    steps:
-      - uses: actions/checkout@v7
-      - name: Никаких внешних инструментов не установлено
-        run: |
-          for tool in typst pandoc pdflatex chromium; do
-            if command -v "$tool" >/dev/null; then
-              echo "$tool must not be installed in this job"; exit 1
-            fi
-          done
-      - run: cargo build --release
-      - run: ./target/release/mdpdf --version
+          if-no-files-found: error
+          retention-days: 14

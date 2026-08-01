@@ -1,8 +1,8 @@
 # Обновление зависимостей отдельными PR.
 #
-# `typst` и `typst-pdf` игнорируются намеренно: по ТЗ §6.2 их версии закреплены
-# точно и обновляются отдельным PR с changelog review, адаптацией compiler,
-# полным test suite и сравнением golden PDF.
+# Typst-линия, Markdown parser и Mermaid renderer игнорируются намеренно: по
+# ТЗ §6.2 и §10.5 их версии обновляются отдельной задачей с полным test suite
+# и проверкой golden PDF.
 
 version: 2
 updates:
@@ -13,8 +13,10 @@ updates:
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: typst
+      - dependency-name: typst-layout
       - dependency-name: typst-pdf
       - dependency-name: pulldown-cmark
+      - dependency-name: mermaid-rs-renderer
 
   - package-ecosystem: github-actions
     directory: /

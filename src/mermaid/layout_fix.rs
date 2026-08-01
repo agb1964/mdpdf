@@ -18,7 +18,7 @@
 //!    рядом с путём.
 //!
 //! Sequence-подписи здесь не трогаем: для них якоря снимаются отдельно
-//! в [`crate::mermaid::render`].
+//! в [`mod@crate::mermaid::render`].
 
 use std::collections::HashSet;
 
