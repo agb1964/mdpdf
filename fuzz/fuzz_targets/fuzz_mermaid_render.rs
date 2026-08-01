@@ -7,6 +7,12 @@
 //! таргета: вызов всегда возвращает `Ok` или `Err`, но никогда не завершает
 //! процесс — контракт «диаграмма не рвёт сборку».
 //!
+//! `libfuzzer-sys` по умолчанию ставит panic hook, который вызывает `abort`
+//! до раскрутки стека. Для этого таргета он противопоказан: renderer panic —
+//! штатный вход `catch_unwind`, а не crash. Init заменяет только этот hook;
+//! непойманная паника по-прежнему достигает внешнего `catch_unwind`
+//! libFuzzer, после чего процесс аварийно завершается и сохраняется artifact.
+//!
 //! Произвольные байты интерпретируются как UTF-8 (невалидные последовательности
 //! отбрасываются `String::from_utf8_lossy`, чтобы фаззер тратил бюджет на сам
 //! рендерер, а не на перекодировку). Вход обрезается по лимиту §15: более
@@ -18,17 +24,22 @@
 use libfuzzer_sys::fuzz_target;
 use mdpdf::mermaid::{limits, render};
 
-fuzz_target!(|data: &[u8]| {
-    let source = String::from_utf8_lossy(data);
-    let source = match source.char_indices().nth(limits::MAX_SOURCE_BYTES) {
-        Some((index, _)) => &source[..index],
-        None => &source,
-    };
+fuzz_target!(
+    init: {
+        std::panic::set_hook(Box::new(|_| {}));
+    },
+    |data: &[u8]| {
+        let source = String::from_utf8_lossy(data);
+        let source = match source.char_indices().nth(limits::MAX_SOURCE_BYTES) {
+            Some((index, _)) => &source[..index],
+            None => &source,
+        };
 
-    if let Ok(rendered) = render(source) {
-        // Инвариант: размеры конечны — иначе вписывание в страницу даст NaN.
-        debug_assert!(rendered.width_px.is_finite() && rendered.height_px.is_finite());
-        // Инвариант: успешный рендер всегда даёт непустой SVG.
-        debug_assert!(!rendered.svg.is_empty());
+        if let Ok(rendered) = render(source) {
+            // Инвариант: размеры конечны — иначе вписывание в страницу даст NaN.
+            debug_assert!(rendered.width_px.is_finite() && rendered.height_px.is_finite());
+            // Инвариант: успешный рендер всегда даёт непустой SVG.
+            debug_assert!(!rendered.svg.is_empty());
+        }
     }
-});
+);
