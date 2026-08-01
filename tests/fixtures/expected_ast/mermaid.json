@@ -137,12 +137,12 @@
       "value": {
         "CodeBlock": {
           "language": "mermaid",
-          "code": "sequenceDiagram\n    participant App as Mini App\n    participant API as API\n    App->>API: login\n    Note over API: проверить подпись\n    alt ok\n        API-->>App: 200\n    else\n        API-->>App: 401\n    end"
+          "code": "sequenceDiagram\n    participant App as Client\n    participant API as API\n    App->>API: login\n    Note over API: проверить подпись\n    alt ok\n        API-->>App: 200\n    else\n        API-->>App: 401\n    end"
         }
       },
       "span": {
         "start": 982,
-        "end": 1221
+        "end": 1219
       }
     },
     {
@@ -158,8 +158,8 @@
         }
       },
       "span": {
-        "start": 1223,
-        "end": 1301
+        "start": 1221,
+        "end": 1299
       }
     },
     {
@@ -177,8 +177,8 @@
         }
       },
       "span": {
-        "start": 1302,
-        "end": 1536
+        "start": 1300,
+        "end": 1534
       }
     },
     {
@@ -189,8 +189,8 @@
         }
       },
       "span": {
-        "start": 1537,
-        "end": 1883
+        "start": 1535,
+        "end": 1881
       }
     },
     {
@@ -206,8 +206,8 @@
         }
       },
       "span": {
-        "start": 1885,
-        "end": 1923
+        "start": 1883,
+        "end": 1921
       }
     },
     {
@@ -221,8 +221,8 @@
         }
       },
       "span": {
-        "start": 1924,
-        "end": 1980
+        "start": 1922,
+        "end": 1978
       }
     },
     {
@@ -233,8 +233,8 @@
         }
       },
       "span": {
-        "start": 1981,
-        "end": 2022
+        "start": 1979,
+        "end": 2020
       }
     },
     {
@@ -252,8 +252,8 @@
         }
       },
       "span": {
-        "start": 2024,
-        "end": 2238
+        "start": 2022,
+        "end": 2236
       }
     },
     {
@@ -264,8 +264,8 @@
         }
       },
       "span": {
-        "start": 2239,
-        "end": 2338
+        "start": 2237,
+        "end": 2336
       }
     }
   ]

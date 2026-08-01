@@ -312,7 +312,7 @@ width 100%.
 1. Временный binary/example или `tests/mmdr_spike.rs` (не в prod path).
 2. Прогнать:
    - `tests/fixtures/markdown/mermaid.md`;
-   - 4 блока из `03-architecture.md` (ТКМ), если доступен;
+   - 4+ блока из репрезентативного документа (flowchart + sequence + subgraph);
    - кириллица, subgraph, sequence alt/Note.
 3. Сохранить SVG в `target/` / tmp; глазами сравнить с legacy PDF.
 4. Проверить `svg_external_reference` на выходе mmdr.

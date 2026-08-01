@@ -44,7 +44,7 @@ graph LR
 
 ```mermaid
 sequenceDiagram
-    participant App as Mini App
+    participant App as Client
     participant API as API
     App->>API: login
     Note over API: проверить подпись

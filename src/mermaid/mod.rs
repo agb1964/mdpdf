@@ -6,6 +6,7 @@
 //! используются (ТЗ §2).
 
 pub mod error;
+pub mod layout_fix;
 pub mod limits;
 pub mod render;
 

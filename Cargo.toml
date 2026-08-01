@@ -2,7 +2,7 @@
 name = "mdpdf"
 version = "0.2.0"
 edition = "2024"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 description = "Standalone Markdown to PDF converter with an embedded Typst compiler"
 readme = "README.md"
 publish = false

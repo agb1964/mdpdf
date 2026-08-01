@@ -10,6 +10,7 @@ use mermaid_rs_renderer::{
 };
 
 use crate::mermaid::error::MermaidError;
+use crate::mermaid::layout_fix;
 use crate::mermaid::limits;
 use crate::svg;
 
@@ -99,6 +100,9 @@ fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
         message: error.to_string(),
     })?;
     let mut layout = compute_layout(&parsed.graph, &theme, &layout_config);
+    // Пост-правки поверх mmdr 0.3.1: «пилящие» рёбра к subgraph id и
+    // подписи flowchart. Sequence-якоря снимаются отдельно ниже.
+    layout_fix::fixup_layout(&mut layout);
     drop_sequence_label_anchors(&mut layout);
     let dimensions = measure_svg_dimensions(&layout, &layout_config, None);
     let svg = pin_font_family(render_svg(&layout, &theme, &layout_config));
@@ -163,21 +167,21 @@ mod tests {
     /// Плотная sequence-диаграмма: самосообщение, alt-блок и многострочные
     /// подписи. Именно на такой раскладке оптимизатор рендерера промахивается.
     const SEQUENCE_DENSE: &str = "sequenceDiagram\n\
-         \x20   participant C as Клиент\n\
-         \x20   participant B as BookingService\n\
-         \x20   participant DB as PostgreSQL\n\
-         \x20   C->>B: POST /appointments\n\
-         \x20   B->>B: проверить BR-01, BR-02, BR-05\n\
-         \x20   B->>DB: BEGIN\n\
-         \x20   B->>DB: подобрать свободный кабинет (BR-04)\n\
-         \x20   B->>DB: INSERT INTO appointments\n\
-         \x20   alt ограничение исключения не нарушено\n\
-         \x20       B->>DB: INSERT INTO notifications (подтверждение, напоминания)\n\
-         \x20       B->>DB: COMMIT\n\
-         \x20       B-->>C: 201 { appointment }\n\
-         \x20   else 23P01 exclusion_violation\n\
-         \x20       B->>DB: ROLLBACK\n\
-         \x20       B-->>C: 409 SLOT_TAKEN\n\
+         \x20   participant C as Client\n\
+         \x20   participant S as Service\n\
+         \x20   participant DB as Database\n\
+         \x20   C->>S: POST /items\n\
+         \x20   S->>S: validate rules R1, R2, R3\n\
+         \x20   S->>DB: BEGIN\n\
+         \x20   S->>DB: allocate resource (R4)\n\
+         \x20   S->>DB: INSERT INTO items\n\
+         \x20   alt constraint ok\n\
+         \x20       S->>DB: INSERT INTO outbox\n\
+         \x20       S->>DB: COMMIT\n\
+         \x20       S-->>C: 201 { item }\n\
+         \x20   else unique_violation\n\
+         \x20       S->>DB: ROLLBACK\n\
+         \x20       S-->>C: 409 CONFLICT\n\
          \x20   end\n";
 
     #[test]
@@ -362,5 +366,38 @@ mod tests {
             matches!(&error, MermaidError::ExternalReference { reference } if reference.contains("example.com")),
             "{error:?}"
         );
+    }
+
+    /// Регрессия: `A --> SubgraphId` в mmdr 0.3.1 даёт path, который
+    /// несколько раз пробегает по ширине рамки подграфа (визуально —
+    /// «лишняя скруглённая рамка»). После fixup path — почти прямая.
+    #[test]
+    fn edge_to_subgraph_id_is_not_a_scribbled_frame() {
+        let source = "flowchart TD\n    A[Start] --> Server\n    subgraph Server[\"Сервер\"]\n        B[API]\n    end\n";
+        let rendered = render(source).expect("renders");
+        let svg = String::from_utf8(rendered.svg).expect("utf-8");
+        let path = edge_path_d(&svg, "edge-0").expect("edge-0 path");
+        // «Пилка»: много горизонтальных сегментов на одной y с размахом
+        // почти на всю ширину. После fixup — один-два отрезка.
+        let segment_count = path.matches('L').count() + path.matches('Q').count();
+        assert!(
+            segment_count <= 3,
+            "path слишком изломан (сегментов {segment_count}): {path}"
+        );
+        // Не должно быть челнока left↔right на одной координате y.
+        assert!(
+            !path.contains("L 8.000") || path.matches("L 8.000").count() <= 1,
+            "осталась пилка по x: {path}"
+        );
+    }
+
+    fn edge_path_d<'a>(svg: &'a str, edge_id: &str) -> Option<&'a str> {
+        let marker = format!("id=\"{edge_id}\"");
+        let start = svg.find(&marker)?;
+        let rest = &svg[start..];
+        let d_at = rest.find("d=\"")?;
+        let path = &rest[d_at + 3..];
+        let end = path.find('"')?;
+        Some(&path[..end])
     }
 }
