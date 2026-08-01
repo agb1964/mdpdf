@@ -50,7 +50,7 @@ release: ## Release-сборка
 release-tag: ## Создать тег v<version из Cargo.toml> и отправить в remote
 	@set -eu; \
 	package_id="$$( $(CARGO) pkgid --locked --manifest-path Cargo.toml )"; \
-	version="$${package_id##*@}"; \
+	version="$${package_id##*[@#]}"; \
 	tag="v$$version"; \
 	branch="$$(git branch --show-current)"; \
 	if [ "$$branch" != "$(RELEASE_BRANCH)" ]; then \

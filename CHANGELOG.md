@@ -6,6 +6,8 @@
 
 ## Unreleased
 
+## [0.3.1] — 2026-08-01
+
 ### Added
 
 - Поддержка диаграмм Mermaid в code blocks с языком `mermaid`. Блок
@@ -65,6 +67,8 @@
 
 ### Fixed
 
+- Проверка release-тега и `make release-tag` поддерживают оба формата вывода
+  `cargo pkgid`: с разделителем версии `@` и `#`.
 - Подписи рёбер flowchart наезжали на узлы (длинные подписи, fan-in в один
   rank-gap): проход размещения подписей `mermaid-rs-renderer` на таких
   схемах оставляет пересечения до тысяч px². `mdpdf` теперь избирательно
@@ -97,5 +101,6 @@
 - Unit, integration, fuzz и golden-тесты.
 - CI для Ubuntu, macOS и Windows и релизные архивы для пяти target.
 
-[Unreleased]: https://github.com/agb1964/mdpdf/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/agb1964/mdpdf/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/agb1964/mdpdf/compare/v0.1.0...v0.3.1
 [0.1.0]: https://github.com/agb1964/mdpdf/releases/tag/v0.1.0

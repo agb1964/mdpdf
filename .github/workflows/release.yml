@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           package_id="$(cargo pkgid --locked --manifest-path Cargo.toml)"
-          version="${package_id##*@}"
+          version="${package_id##*[@#]}"
           if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
             echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
             exit 1
