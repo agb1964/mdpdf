@@ -1,5 +1,10 @@
 # mdpdf
 
+[![CI](https://github.com/agb1964/mdpdf/actions/workflows/ci.yml/badge.svg)](https://github.com/agb1964/mdpdf/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/agb1964/mdpdf)](https://github.com/agb1964/mdpdf/releases)
+[![downloads](https://img.shields.io/github/downloads/agb1964/mdpdf/total)](https://github.com/agb1964/mdpdf/releases)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
+
 Автономная консольная утилита: Markdown → PDF.
 
 ```text
