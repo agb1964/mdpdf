@@ -6,7 +6,7 @@
 //! используются (ТЗ §2).
 
 pub mod error;
-pub mod layout_fix;
+pub(crate) mod layout_fix;
 #[cfg(test)]
 mod layout_probe;
 pub mod limits;

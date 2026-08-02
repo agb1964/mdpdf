@@ -3,6 +3,8 @@
 //! Всё выводится типизированными вызовами функций шаблона; ручная строковая
 //! Typst-разметка не используется.
 
+use std::borrow::Borrow;
+
 use crate::ast::block::{
     Alignment, Block, CodeBlock, Heading, List, ListItem, ListKind, Table, TableRow,
 };
@@ -79,10 +81,10 @@ fn blocks_expression(
     if blocks.is_empty() {
         return Ok(EMPTY_CONTENT.to_owned());
     }
-    let mut parts = Vec::with_capacity(blocks.len());
-    for block in blocks {
-        parts.push(block_expression(block, resources, options, warnings)?);
-    }
+    let parts = blocks
+        .iter()
+        .map(|block| block_expression(block, resources, options, warnings))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(parts.join(" + "))
 }
 
@@ -138,23 +140,18 @@ fn list_expression(
     options: &RenderOptions,
     warnings: &mut Vec<String>,
 ) -> Result<String, TypstGenerationError> {
-    let mut items = Vec::with_capacity(list.items.len());
-    for item in &list.items {
-        items.push(list_item_expression(item, resources, options, warnings)?);
-    }
-    // Одноэлементный кортеж Typst требует завершающей запятой.
-    let joined = if items.len() == 1 {
-        format!("{},", items[0])
-    } else {
-        items.join(", ")
-    };
-
+    let items = list
+        .items
+        .iter()
+        .map(|item| list_item_expression(item, resources, options, warnings))
+        .collect::<Result<Vec<_>, _>>()?;
     let (ordered, start) = match list.kind {
         ListKind::Unordered => ("false", 1),
         ListKind::Ordered { start } => ("true", start),
     };
     Ok(format!(
-        "mdpdf-list(ordered: {ordered}, start: {start}, items: ({joined}))"
+        "mdpdf-list(ordered: {ordered}, start: {start}, items: {})",
+        tuple(&items)
     ))
 }
 
@@ -166,9 +163,9 @@ fn list_item_expression(
 ) -> Result<String, TypstGenerationError> {
     let body = blocks_expression(&item.blocks, resources, options, warnings)?;
     let checked = match item.checked {
-        None => "none".to_owned(),
-        Some(true) => "true".to_owned(),
-        Some(false) => "false".to_owned(),
+        None => "none",
+        Some(true) => "true",
+        Some(false) => "false",
     };
     Ok(format!("mdpdf-task(checked: {checked}, {body})"))
 }
@@ -184,11 +181,12 @@ fn table_expression(
     let alignments = tuple(&alignments);
 
     let header = row_expression(&table.header, resources)?;
-    let mut rows = Vec::with_capacity(table.rows.len());
-    for row in &table.rows {
-        rows.push(row_expression(row, resources)?);
-    }
-    let rows = tuple(&rows.iter().map(String::as_str).collect::<Vec<_>>());
+    let rows = table
+        .rows
+        .iter()
+        .map(|row| row_expression(row, resources))
+        .collect::<Result<Vec<_>, _>>()?;
+    let rows = tuple(&rows);
 
     Ok(format!(
         "mdpdf-table(columns: {columns}, alignments: {alignments}, header: {header}, rows: {rows})"
@@ -199,11 +197,12 @@ fn row_expression(
     row: &TableRow,
     resources: &mut Vec<ResourceReference>,
 ) -> Result<String, TypstGenerationError> {
-    let mut cells = Vec::with_capacity(row.cells.len());
-    for cell in &row.cells {
-        cells.push(inline_expression(&cell.content, resources)?);
-    }
-    Ok(tuple(&cells.iter().map(String::as_str).collect::<Vec<_>>()))
+    let cells = row
+        .cells
+        .iter()
+        .map(|cell| inline_expression(&cell.content, resources))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(tuple(&cells))
 }
 
 const fn alignment_name(alignment: &Alignment) -> &'static str {
@@ -217,10 +216,10 @@ const fn alignment_name(alignment: &Alignment) -> &'static str {
 }
 
 /// Кортеж Typst со стабильной формой: одноэлементный получает запятую.
-pub(crate) fn tuple(items: &[&str]) -> String {
+pub(crate) fn tuple<S: Borrow<str>>(items: &[S]) -> String {
     match items {
         [] => "()".to_owned(),
-        [single] => format!("({single},)"),
+        [single] => format!("({},)", single.borrow()),
         many => format!("({})", many.join(", ")),
     }
 }

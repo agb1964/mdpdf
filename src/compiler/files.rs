@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use crate::ast::SourceSpan;
@@ -248,7 +249,7 @@ fn read_resource(
     }
 
     let mut bytes = Vec::new();
-    std::io::Read::read_to_end(&mut file, &mut bytes)
+    file.read_to_end(&mut bytes)
         .map_err(|error| image(format!("cannot read file: {error}")))?;
     Ok(bytes)
 }

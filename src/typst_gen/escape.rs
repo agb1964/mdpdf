@@ -7,6 +7,8 @@
 //! Главный инвариант (ТЗ §22): ни один пользовательский фрагмент не должен
 //! интерпретироваться как Typst-код.
 
+use std::fmt::Write;
+
 use thiserror::Error;
 
 use crate::typst_gen::RESOURCE_PREFIX;
@@ -50,7 +52,8 @@ pub fn string_literal(value: &str) -> String {
             '\t' => result.push_str("\\t"),
             // Управляющие символы и невидимые форматирующие: только через \u{...}.
             ch if is_control_like(ch) => {
-                result.push_str(&format!("\\u{{{:x}}}", ch as u32));
+                // Запись в String не может завершиться ошибкой.
+                let _ = write!(result, "\\u{{{:x}}}", ch as u32);
             }
             ch => result.push(ch),
         }

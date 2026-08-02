@@ -1,7 +1,6 @@
 //! Генератор Typst: параметры рендеринга и точка входа этапа 2 (ТЗ §19, §20).
 
 use std::fmt;
-use std::str::FromStr;
 
 use crate::ast::SourceSpan;
 use crate::ast::document::Document;
@@ -110,21 +109,6 @@ impl PaperSize {
     }
 }
 
-impl FromStr for PaperSize {
-    type Err = TypstGenerationError;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "a4" => Ok(Self::A4),
-            "letter" | "us-letter" => Ok(Self::Letter),
-            other => Err(TypstGenerationError::InvalidOption {
-                name: "paper".to_owned(),
-                message: format!("unknown paper size: {other}"),
-            }),
-        }
-    }
-}
-
 /// Единица длины (ТЗ §20.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LengthUnit {
@@ -226,17 +210,20 @@ impl Length {
             message: message.to_owned(),
         };
 
-        let (number, unit) = ["mm", "cm", "in", "pt"]
-            .iter()
-            .find_map(|suffix| trimmed.strip_suffix(suffix).map(|number| (number, *suffix)))
-            .ok_or_else(|| invalid("length must end with pt, mm, cm or in"))?;
+        let (number, unit) = [
+            LengthUnit::Mm,
+            LengthUnit::Cm,
+            LengthUnit::In,
+            LengthUnit::Pt,
+        ]
+        .into_iter()
+        .find_map(|unit| {
+            trimmed
+                .strip_suffix(unit.suffix())
+                .map(|number| (number, unit))
+        })
+        .ok_or_else(|| invalid("length must end with pt, mm, cm or in"))?;
 
-        let unit = match unit {
-            "pt" => LengthUnit::Pt,
-            "mm" => LengthUnit::Mm,
-            "cm" => LengthUnit::Cm,
-            _ => LengthUnit::In,
-        };
         let value: f64 = number
             .trim()
             .parse()
@@ -391,7 +378,7 @@ impl TypstGenerator {
         use crate::typst_gen::escape::string_literal;
 
         writer.line("#show: mdpdf-document.with(");
-        writer.indented_infallible(|writer| {
+        writer.indented(|writer| {
             writer.line(&format!(
                 "paper: {},",
                 string_literal(self.options.paper.typst_name())
@@ -463,16 +450,6 @@ mod tests {
                 .to_string(),
             "11.5pt"
         );
-    }
-
-    #[test]
-    fn paper_sizes_are_parsed() {
-        assert_eq!(PaperSize::from_str("a4").expect("a4"), PaperSize::A4);
-        assert_eq!(
-            PaperSize::from_str("LETTER").expect("letter"),
-            PaperSize::Letter
-        );
-        assert!(PaperSize::from_str("a3").is_err());
     }
 
     #[test]

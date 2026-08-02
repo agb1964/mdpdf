@@ -43,18 +43,12 @@ pub fn external_reference(bytes: &[u8]) -> Option<String> {
         let after_href = href_start + "href".len();
 
         // Между `href` и `=` допускаются пробелы (`href = "..."`).
-        let mut cursor = after_href;
-        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-            cursor += 1;
-        }
+        let mut cursor = skip_ascii_whitespace(bytes, after_href);
         if bytes.get(cursor) != Some(&b'=') {
             search_from = after_href;
             continue;
         }
-        cursor += 1;
-        while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-            cursor += 1;
-        }
+        cursor = skip_ascii_whitespace(bytes, cursor + 1);
 
         let Some(&quote) = bytes.get(cursor) else {
             break;
@@ -80,6 +74,15 @@ pub fn external_reference(bytes: &[u8]) -> Option<String> {
     }
 
     None
+}
+
+/// Позиция первого непробельного байта начиная с `from`; конец среза, если
+/// такого байта нет.
+fn skip_ascii_whitespace(bytes: &[u8], from: usize) -> usize {
+    bytes
+        .get(from..)
+        .and_then(|rest| rest.iter().position(|byte| !byte.is_ascii_whitespace()))
+        .map_or(bytes.len(), |offset| from + offset)
 }
 
 #[cfg(test)]

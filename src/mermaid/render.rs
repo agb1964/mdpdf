@@ -131,7 +131,7 @@ fn render_inner(source: &str) -> Result<RenderedDiagram, MermaidError> {
     layout_fix::fixup_layout(&mut layout);
     drop_sequence_label_anchors(&mut layout);
     let dimensions = measure_svg_dimensions(&layout, &layout_config, None);
-    let svg = pin_font_family(render_svg(&layout, &theme, &layout_config));
+    let svg = pin_font_family(&render_svg(&layout, &theme, &layout_config));
 
     Ok(RenderedDiagram {
         svg: svg.into_bytes(),
@@ -180,7 +180,7 @@ fn drop_sequence_label_anchors(layout: &mut Layout) {
 ///
 /// Побочный эффект: подпись узла, буквально содержащая
 /// `mdpdf-diagram-sans`, будет переписана. Цена признана приемлемой.
-fn pin_font_family(svg: String) -> String {
+fn pin_font_family(svg: &str) -> String {
     svg.replace(MEASUREMENT_FAMILY, RENDER_FAMILY)
 }
 

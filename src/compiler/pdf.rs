@@ -84,12 +84,10 @@ pub fn looks_like_pdf(bytes: &[u8]) -> bool {
 }
 
 /// Только ошибки из набора диагностик.
-#[must_use]
-pub fn errors_only(diagnostics: &[Diagnostic]) -> Vec<&Diagnostic> {
+pub fn errors_only(diagnostics: &[Diagnostic]) -> impl Iterator<Item = &Diagnostic> {
     diagnostics
         .iter()
         .filter(|diagnostic| diagnostic.severity == Severity::Error)
-        .collect()
 }
 
 #[cfg(test)]
@@ -203,7 +201,7 @@ mod tests {
                 hints: vec![],
             },
         ];
-        let errors = errors_only(&diagnostics);
+        let errors: Vec<_> = errors_only(&diagnostics).collect();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].message, "e");
     }

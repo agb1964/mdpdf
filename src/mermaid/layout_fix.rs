@@ -40,11 +40,11 @@ pub(crate) fn fixup_layout(layout: &mut Layout) {
 /// (см. тест `side_entry_keeps_detour_around_middle_node`) first→last
 /// превратил бы в хорду сквозь середину.
 fn simplify_subgraph_anchor_edges(layout: &mut Layout) {
-    let anchor_ids: HashSet<String> = layout
+    let anchor_ids: HashSet<&str> = layout
         .nodes
         .iter()
         .filter(|(_, node)| node.hidden || node.anchor_subgraph.is_some())
-        .map(|(id, _)| id.clone())
+        .map(|(id, _)| id.as_str())
         .collect();
 
     if anchor_ids.is_empty() {
@@ -62,8 +62,9 @@ fn simplify_subgraph_anchor_edges(layout: &mut Layout) {
         }
         // Дополнительно: «пилка» действительно раздувает длину. Короткий
         // ортогональный обход (4 точки) не трогаем.
-        let first = edge.points[0];
-        let last = *edge.points.last().expect("len > 2");
+        let [first, .., last] = edge.points[..] else {
+            continue;
+        };
         let direct = distance(first, last).max(1.0);
         let along = polyline_length(&edge.points);
         if along > direct * 2.0 || edge.points.len() > 4 {
@@ -143,7 +144,9 @@ fn place_flowchart_edge_labels(layout: &mut Layout) {
     for edge_idx in labeled {
         let (points, label_w, label_h, current) = {
             let edge = &layout.edges[edge_idx];
-            let label = edge.label.as_ref().expect("filtered");
+            let Some(label) = edge.label.as_ref() else {
+                continue;
+            };
             (
                 edge.points.clone(),
                 label.width,
@@ -313,15 +316,13 @@ fn polyline_length(points: &[(f32, f32)]) -> f32 {
 
 /// Точка на полилинии на доле `t` ∈ [0, 1] длины.
 fn point_at_fraction(points: &[(f32, f32)], t: f32) -> Option<(f32, f32)> {
-    if points.is_empty() {
-        return None;
-    }
+    let &first = points.first()?;
     if points.len() == 1 {
-        return Some(points[0]);
+        return Some(first);
     }
     let total = polyline_length(points);
     if total <= f32::EPSILON {
-        return Some(points[0]);
+        return Some(first);
     }
     let mut remain = t.clamp(0.0, 1.0) * total;
     for window in points.windows(2) {
@@ -342,19 +343,14 @@ fn point_at_fraction(points: &[(f32, f32)], t: f32) -> Option<(f32, f32)> {
 }
 
 fn overlap_area(x: f32, y: f32, w: f32, h: f32, obstacles: &[(f32, f32, f32, f32)]) -> f32 {
-    let mut area = 0.0;
-    for &(ox, oy, ow, oh) in obstacles {
-        let ix1 = x.max(ox);
-        let iy1 = y.max(oy);
-        let ix2 = (x + w).min(ox + ow);
-        let iy2 = (y + h).min(oy + oh);
-        let iw = ix2 - ix1;
-        let ih = iy2 - iy1;
-        if iw > 0.0 && ih > 0.0 {
-            area += iw * ih;
-        }
-    }
-    area
+    obstacles
+        .iter()
+        .filter_map(|&(ox, oy, ow, oh)| {
+            let iw = (x + w).min(ox + ow) - x.max(ox);
+            let ih = (y + h).min(oy + oh) - y.max(oy);
+            (iw > 0.0 && ih > 0.0).then_some(iw * ih)
+        })
+        .sum()
 }
 
 #[cfg(test)]

@@ -3,8 +3,6 @@
 //! Отступ — 2 пробела, перевод строки — LF, хвостовых пробелов нет,
 //! завершающий LF обязателен.
 
-use crate::typst_gen::error::TypstGenerationError;
-
 /// Накопитель Typst-исходника с учётом отступов.
 #[derive(Debug, Default)]
 pub struct TypstWriter {
@@ -46,29 +44,16 @@ impl TypstWriter {
         self.buffer.push('\n');
     }
 
-    /// Выполняет замыкание на один уровень глубже.
+    /// Выполняет замыкание на один уровень глубже и возвращает его результат.
     ///
-    /// # Errors
-    ///
-    /// Пробрасывает ошибку замыкания.
-    pub fn indented<F>(&mut self, body: F) -> Result<(), TypstGenerationError>
-    where
-        F: FnOnce(&mut Self) -> Result<(), TypstGenerationError>,
-    {
+    /// Одна функция на оба случая: замыкание, которое не может завершиться
+    /// ошибкой, возвращает `()`, а фейлящееся — `Result`, который
+    /// пробрасывается вызывающему как есть.
+    pub fn indented<R>(&mut self, body: impl FnOnce(&mut Self) -> R) -> R {
         self.depth += 1;
         let result = body(self);
         self.depth -= 1;
         result
-    }
-
-    /// То же для замыканий, которые не могут завершиться ошибкой.
-    pub fn indented_infallible<F>(&mut self, body: F)
-    where
-        F: FnOnce(&mut Self),
-    {
-        self.depth += 1;
-        body(self);
-        self.depth -= 1;
     }
 
     /// Завершает вывод, гарантируя ровно один завершающий LF.
@@ -92,9 +77,9 @@ mod tests {
     fn indentation_is_two_spaces_per_level() {
         let mut writer = TypstWriter::new();
         writer.line("a");
-        writer.indented_infallible(|writer| {
+        writer.indented(|writer| {
             writer.line("b");
-            writer.indented_infallible(|writer| writer.line("c"));
+            writer.indented(|writer| writer.line("c"));
         });
         assert_eq!(writer.finish(), "a\n  b\n    c\n");
     }
@@ -118,7 +103,7 @@ mod tests {
     #[test]
     fn empty_line_carries_no_indentation() {
         let mut writer = TypstWriter::new();
-        writer.indented_infallible(|writer| {
+        writer.indented(|writer| {
             writer.line("");
             writer.line("a");
         });

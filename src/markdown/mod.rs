@@ -6,4 +6,4 @@
 pub(crate) mod builder;
 pub mod error;
 pub mod parser;
-pub mod state;
+pub(crate) mod state;

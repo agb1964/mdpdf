@@ -128,8 +128,10 @@ fn validate_blocks(blocks: &[crate::ast::Spanned<Block>]) -> Result<(), AstValid
     for block in blocks {
         validate_span(block.span)?;
         match &block.value {
-            Block::Heading(heading) => validate_inlines(&heading.content, false, false)?,
-            Block::Paragraph(paragraph) => validate_inlines(&paragraph.content, false, false)?,
+            Block::Heading(heading) => validate_inlines(&heading.content, InlineContext::ROOT)?,
+            Block::Paragraph(paragraph) => {
+                validate_inlines(&paragraph.content, InlineContext::ROOT)?;
+            }
             Block::Quote(quote) => validate_blocks(&quote.blocks)?,
             Block::List(list) => validate_list(list, block.span)?,
             Block::Table(table) => validate_table(table, block.span)?,
@@ -173,34 +175,65 @@ fn validate_table(table: &Table, span: SourceSpan) -> Result<(), AstValidationEr
             });
         }
         for cell in &row.cells {
-            validate_inlines(&cell.content, false, false)?;
+            validate_inlines(&cell.content, InlineContext::ROOT)?;
         }
     }
     Ok(())
 }
 
-fn validate_inlines(
-    inlines: &[Inline],
+/// Контекст обхода inline-элементов: внутри каких контейнеров идёт проверка
+/// (ТЗ §14). Два соседних параметра одного типа `bool` легко переставить
+/// местами, поэтому они объединены в тип.
+#[derive(Debug, Clone, Copy)]
+struct InlineContext {
+    /// Обход идёт внутри ссылки.
     inside_link: bool,
+    /// Обход идёт внутри изображения.
     inside_image: bool,
-) -> Result<(), AstValidationError> {
+}
+
+impl InlineContext {
+    /// Верхний уровень: ни ссылки, ни изображения вокруг.
+    const ROOT: Self = Self {
+        inside_link: false,
+        inside_image: false,
+    };
+
+    /// Тот же контекст, но уже внутри ссылки.
+    const fn in_link(self) -> Self {
+        Self {
+            inside_link: true,
+            inside_image: self.inside_image,
+        }
+    }
+
+    /// Тот же контекст, но уже внутри изображения.
+    const fn in_image(self) -> Self {
+        Self {
+            inside_link: self.inside_link,
+            inside_image: true,
+        }
+    }
+}
+
+fn validate_inlines(inlines: &[Inline], context: InlineContext) -> Result<(), AstValidationError> {
     for inline in inlines {
         match inline {
             Inline::Emphasis(children)
             | Inline::Strong(children)
             | Inline::Strikethrough(children) => {
-                validate_inlines(children, inside_link, inside_image)?;
+                validate_inlines(children, context)?;
             }
             Inline::Link(link) => {
                 validate_span(link.span)?;
-                if inside_link {
+                if context.inside_link {
                     return Err(AstValidationError::NestedLink { span: link.span });
                 }
-                validate_inlines(&link.value.content, true, inside_image)?;
+                validate_inlines(&link.value.content, context.in_link())?;
             }
             Inline::Image(image) => {
                 validate_span(image.span)?;
-                if inside_image {
+                if context.inside_image {
                     return Err(AstValidationError::NestedImage { span: image.span });
                 }
                 if is_network_source(&image.value.source) {
@@ -209,7 +242,7 @@ fn validate_inlines(
                         span: image.span,
                     });
                 }
-                validate_inlines(&image.value.alt, inside_link, true)?;
+                validate_inlines(&image.value.alt, context.in_image())?;
             }
             Inline::Text(_) | Inline::Code(_) | Inline::SoftBreak | Inline::HardBreak => {}
         }
@@ -226,7 +259,7 @@ const fn validate_span(span: SourceSpan) -> Result<(), AstValidationError> {
 
 /// Сетевой или `data:`-адрес изображения. Проверка регистронезависимая.
 #[must_use]
-pub fn is_network_source(source: &str) -> bool {
+fn is_network_source(source: &str) -> bool {
     let trimmed = source.trim();
     // Срез только через `get`: `trimmed[..n]` режет UTF-8 не на границе символа
     // и паникует на адресе вроде `dat€:x`, а паник быть не должно (ТЗ §17).

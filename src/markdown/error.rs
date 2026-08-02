@@ -21,7 +21,7 @@ pub enum MarkdownError {
     #[error("unsupported Markdown construct: {construct}")]
     UnsupportedConstruct {
         /// Название конструкции.
-        construct: String,
+        construct: &'static str,
         /// Диапазон исходного Markdown.
         span: SourceSpan,
     },
@@ -30,9 +30,9 @@ pub enum MarkdownError {
     #[error("invalid nesting: expected {expected}, found {actual}")]
     InvalidNesting {
         /// Ожидаемый контейнер.
-        expected: String,
+        expected: &'static str,
         /// Фактический контейнер.
-        actual: String,
+        actual: &'static str,
         /// Диапазон исходного Markdown.
         span: SourceSpan,
     },
@@ -41,7 +41,7 @@ pub enum MarkdownError {
     #[error("incomplete document: {open_construct} was never closed")]
     IncompleteDocument {
         /// Незакрытый контейнер.
-        open_construct: String,
+        open_construct: &'static str,
         /// Диапазон исходного Markdown.
         span: SourceSpan,
     },

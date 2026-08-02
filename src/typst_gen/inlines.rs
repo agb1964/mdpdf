@@ -26,10 +26,10 @@ pub fn inline_expression(
         return Ok(EMPTY_CONTENT.to_owned());
     }
 
-    let mut parts = Vec::with_capacity(inlines.len());
-    for inline in inlines {
-        parts.push(single_inline(inline, resources)?);
-    }
+    let parts = inlines
+        .iter()
+        .map(|inline| single_inline(inline, resources))
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(parts.join(" + "))
 }
 
@@ -54,7 +54,7 @@ fn single_inline(
                 TypstGenerationError::InvalidUrl {
                     value: link.value.destination.clone(),
                     span: Some(link.span),
-                    message: error.to_string(),
+                    source: error,
                 }
             })?;
             let body = inline_expression(&link.value.content, resources)?;
@@ -85,18 +85,24 @@ fn single_inline(
 /// Плоский текст inline-последовательности: только содержимое, без разметки.
 fn plain_text(inlines: &[Inline]) -> String {
     let mut text = String::new();
+    push_plain_text(inlines, &mut text);
+    text
+}
+
+/// Дописывает плоский текст в готовый буфер: вложенные уровни не заводят
+/// собственную строку, а пишут в тот же.
+fn push_plain_text(inlines: &[Inline], text: &mut String) {
     for inline in inlines {
         match inline {
             Inline::Text(value) | Inline::Code(value) => text.push_str(value),
             Inline::SoftBreak | Inline::HardBreak => text.push(' '),
             Inline::Emphasis(children)
             | Inline::Strong(children)
-            | Inline::Strikethrough(children) => text.push_str(&plain_text(children)),
-            Inline::Link(link) => text.push_str(&plain_text(&link.value.content)),
-            Inline::Image(image) => text.push_str(&plain_text(&image.value.alt)),
+            | Inline::Strikethrough(children) => push_plain_text(children, text),
+            Inline::Link(link) => push_plain_text(&link.value.content, text),
+            Inline::Image(image) => push_plain_text(&image.value.alt, text),
         }
     }
-    text
 }
 
 /// Присваивает изображению виртуальный путь и запоминает соответствие (ТЗ §24.6).

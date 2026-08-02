@@ -5,6 +5,8 @@
 //! Подписи узлов и рёбер — пользовательский текст — живут исключительно
 //! внутри байтов SVG и в Typst source не попадают вообще (ТЗ §10.5.3, §23).
 
+use thiserror::Error;
+
 use crate::ast::SourceSpan;
 use crate::ast::block::CodeBlock;
 use crate::mermaid::{self, MermaidError, RenderedDiagram};
@@ -21,12 +23,18 @@ use crate::typst_gen::next_logical_path;
 const DIAGRAM_ALT: &str = "Mermaid diagram";
 
 /// Ошибка генерации диаграммы.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DiagramError {
     /// Диаграмма не отрендерилась. Вызывающий код деградирует до блока кода
     /// с предупреждением, сборка продолжается (ТЗ §10.5.5).
-    Mermaid(MermaidError),
+    #[error(transparent)]
+    Mermaid(#[from] MermaidError),
     /// Нарушен внутренний инвариант генератора — сборка обязана упасть.
+    ///
+    /// Без `#[from]` намеренно: у вариантов противоположная семантика обработки,
+    /// и автоматическая конверсия через `?` увела бы фатальную ошибку генерации
+    /// в путь деградации. Вариант строится явно, в единственном месте.
+    #[error(transparent)]
     Generation(TypstGenerationError),
 }
 
@@ -46,7 +54,7 @@ pub fn diagram_expression(
     resources: &mut Vec<ResourceReference>,
     options: &RenderOptions,
 ) -> Result<String, DiagramError> {
-    let rendered = mermaid::render(&code.code).map_err(DiagramError::Mermaid)?;
+    let rendered = mermaid::render(&code.code)?;
 
     let placement = choose_placement(rendered.width_px, rendered.height_px, options);
 

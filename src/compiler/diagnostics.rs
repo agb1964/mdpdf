@@ -43,8 +43,18 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     /// Однострочное представление для вывода в stderr.
+    ///
+    /// Тонкая обёртка над [`Display`](std::fmt::Display); в новом коде диагностику
+    /// достаточно подставить в форматную строку.
     #[must_use]
     pub fn render(&self) -> String {
+        self.to_string()
+    }
+}
+
+impl std::fmt::Display for Diagnostic {
+    /// Однострочное представление для вывода в stderr.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let level = match self.severity {
             Severity::Warning => "warning",
             Severity::Error => "error",
@@ -53,9 +63,13 @@ impl Diagnostic {
             Some(source) => {
                 let line = source.line.unwrap_or(1);
                 let column = source.column.unwrap_or(1);
-                format!("{}:{line}:{column}: {level}: {}", source.file, self.message)
+                write!(
+                    formatter,
+                    "{}:{line}:{column}: {level}: {}",
+                    source.file, self.message
+                )
             }
-            None => format!("{level}: {}", self.message),
+            None => write!(formatter, "{level}: {}", self.message),
         }
     }
 }

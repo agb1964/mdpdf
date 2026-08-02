@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::cli::{Cli, PaperArg};
 use crate::error::AppError;
 use crate::output;
-use crate::typst_gen::generator::{Length, RenderOptions};
+use crate::typst_gen::generator::{Length, PaperSize, RenderOptions};
 
 /// Источник входного документа.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +31,7 @@ pub struct AppConfig {
     /// Автор документа из CLI.
     pub author: Option<String>,
     /// Размер страницы.
-    pub paper: String,
+    pub paper: PaperSize,
     /// Поля страницы.
     pub margin: String,
     /// Основной размер текста.
@@ -54,14 +54,17 @@ pub struct AppConfig {
     pub verbose: bool,
 }
 
-/// Строковое представление размера страницы для [`PaperSize::from_str`].
+/// Размер страницы CLI переводится в доменный тип напрямую (ТЗ §20.1):
+/// промежуточная строка между двумя enum не нужна.
 ///
 /// Явный `match` вместо `format!("{:?}", ..)` не зависит от имени варианта
 /// enum `Debug`-представления и не ломается при его переименовании.
-fn paper_arg_to_str(paper: PaperArg) -> &'static str {
-    match paper {
-        PaperArg::A4 => "a4",
-        PaperArg::Letter => "letter",
+impl From<PaperArg> for PaperSize {
+    fn from(paper: PaperArg) -> Self {
+        match paper {
+            PaperArg::A4 => Self::A4,
+            PaperArg::Letter => Self::Letter,
+        }
     }
 }
 
@@ -76,7 +79,7 @@ impl AppConfig {
         let input = if args.reads_stdin() {
             InputSource::Stdin
         } else {
-            InputSource::File(PathBuf::from(&args.input))
+            InputSource::File(PathBuf::from(args.input))
         };
 
         // PDF не записывается в --check и в режиме, где запрошен только --emit-*
@@ -103,7 +106,7 @@ impl AppConfig {
             output,
             title: args.title,
             author: args.author,
-            paper: paper_arg_to_str(args.paper).to_owned(),
+            paper: args.paper.into(),
             margin: args.margin,
             font_size: args.font_size,
             toc: args.toc,
@@ -121,11 +124,11 @@ impl AppConfig {
     ///
     /// # Errors
     ///
-    /// [`AppError::TypstGeneration`], если размер страницы, поля или размер
-    /// текста заданы недопустимо.
+    /// [`AppError::TypstGeneration`], если поля или размер текста заданы
+    /// недопустимо.
     pub fn render_options(&self) -> Result<RenderOptions, AppError> {
         let options = RenderOptions {
-            paper: self.paper.parse()?,
+            paper: self.paper,
             margin: Length::parse(&self.margin, "margin")?,
             font_size: Length::parse(&self.font_size, "font-size")?,
             title: self.title.clone(),

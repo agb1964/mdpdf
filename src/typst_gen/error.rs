@@ -3,6 +3,7 @@
 use thiserror::Error;
 
 use crate::ast::SourceSpan;
+use crate::typst_gen::escape::EscapeError;
 
 /// Ошибка генерации Typst.
 #[derive(Debug, Error)]
@@ -26,14 +27,15 @@ pub enum TypstGenerationError {
     },
 
     /// Некорректный адрес ссылки.
-    #[error("invalid url {value}: {message}")]
+    #[error("invalid url {value}: {source}")]
     InvalidUrl {
         /// Исходное значение.
         value: String,
         /// Диапазон исходного Markdown, если он известен.
         span: Option<SourceSpan>,
-        /// Описание проблемы.
-        message: String,
+        /// Причина: значение не удалось экранировать.
+        #[source]
+        source: EscapeError,
     },
 
     /// Некорректный путь изображения.

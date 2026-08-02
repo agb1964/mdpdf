@@ -78,17 +78,17 @@ impl AstBuilder {
             }
             Event::TaskListMarker(checked) => self.task_list_marker(checked, span),
             Event::Html(_) | Event::InlineHtml(_) => Err(MarkdownError::UnsupportedConstruct {
-                construct: "inline HTML".to_owned(),
+                construct: "inline HTML",
                 span,
             }),
             Event::InlineMath(_) | Event::DisplayMath(_) => {
                 Err(MarkdownError::UnsupportedConstruct {
-                    construct: "math".to_owned(),
+                    construct: "math",
                     span,
                 })
             }
             Event::FootnoteReference(_) => Err(MarkdownError::UnsupportedConstruct {
-                construct: "footnote".to_owned(),
+                construct: "footnote",
                 span,
             }),
         }
@@ -102,7 +102,7 @@ impl AstBuilder {
     pub fn finish(mut self) -> Result<Document, MarkdownError> {
         if let Some(frame) = self.stack.pop() {
             return Err(MarkdownError::IncompleteDocument {
-                open_construct: frame.name().to_owned(),
+                open_construct: frame.name(),
                 span: frame.span(),
             });
         }
@@ -246,25 +246,25 @@ impl AstBuilder {
             }
             Tag::HtmlBlock => {
                 return Err(MarkdownError::UnsupportedConstruct {
-                    construct: "HTML block".to_owned(),
+                    construct: "HTML block",
                     span,
                 });
             }
             Tag::FootnoteDefinition(_) => {
                 return Err(MarkdownError::UnsupportedConstruct {
-                    construct: "footnote definition".to_owned(),
+                    construct: "footnote definition",
                     span,
                 });
             }
             Tag::DefinitionList | Tag::DefinitionListTitle | Tag::DefinitionListDefinition => {
                 return Err(MarkdownError::UnsupportedConstruct {
-                    construct: "definition list".to_owned(),
+                    construct: "definition list",
                     span,
                 });
             }
             Tag::Superscript | Tag::Subscript => {
                 return Err(MarkdownError::UnsupportedConstruct {
-                    construct: "superscript or subscript".to_owned(),
+                    construct: "superscript or subscript",
                     span,
                 });
             }
@@ -273,9 +273,8 @@ impl AstBuilder {
     }
 
     fn end(&mut self, tag: TagEnd, span: SourceSpan) -> Result<(), MarkdownError> {
-        match tag {
-            TagEnd::Item | TagEnd::BlockQuote(_) => self.close_implicit_paragraph()?,
-            _ => {}
+        if matches!(tag, TagEnd::Item | TagEnd::BlockQuote(_)) {
+            self.close_implicit_paragraph()?;
         }
 
         let frame = self.pop_frame(&tag, span)?;
@@ -348,8 +347,8 @@ impl AstBuilder {
         let expected = expected_frame_name(tag);
         let Some(frame) = self.stack.pop() else {
             return Err(MarkdownError::InvalidNesting {
-                expected: expected.to_owned(),
-                actual: "nothing".to_owned(),
+                expected,
+                actual: "nothing",
                 span,
             });
         };
@@ -357,8 +356,8 @@ impl AstBuilder {
             return Ok(frame);
         }
         Err(MarkdownError::InvalidNesting {
-            expected: expected.to_owned(),
-            actual: frame.name().to_owned(),
+            expected,
+            actual: frame.name(),
             span,
         })
     }
@@ -377,8 +376,8 @@ impl AstBuilder {
                 Ok(())
             }
             other => Err(MarkdownError::InvalidNesting {
-                expected: "list".to_owned(),
-                actual: other.map_or("nothing", |frame| frame.name()).to_owned(),
+                expected: "list",
+                actual: other.map_or("nothing", |frame| frame.name()),
                 span,
             }),
         }
@@ -418,8 +417,8 @@ impl AstBuilder {
                 Ok(())
             }
             other => Err(MarkdownError::InvalidNesting {
-                expected: "table".to_owned(),
-                actual: other.map_or("nothing", |frame| frame.name()).to_owned(),
+                expected: "table",
+                actual: other.map_or("nothing", |frame| frame.name()),
                 span,
             }),
         }
@@ -436,8 +435,8 @@ impl AstBuilder {
                 Ok(())
             }
             other => Err(MarkdownError::InvalidNesting {
-                expected: "table".to_owned(),
-                actual: other.map_or("nothing", |frame| frame.name()).to_owned(),
+                expected: "table",
+                actual: other.map_or("nothing", |frame| frame.name()),
                 span,
             }),
         }
@@ -461,8 +460,8 @@ impl AstBuilder {
                 Ok(())
             }
             other => Err(MarkdownError::InvalidNesting {
-                expected: "table head or table row".to_owned(),
-                actual: other.map_or("nothing", |frame| frame.name()).to_owned(),
+                expected: "table head or table row",
+                actual: other.map_or("nothing", |frame| frame.name()),
                 span,
             }),
         }
@@ -487,8 +486,8 @@ impl AstBuilder {
                 Ok(())
             }
             other => Err(MarkdownError::InvalidNesting {
-                expected: "list item".to_owned(),
-                actual: other.map_or("nothing", |frame| frame.name()).to_owned(),
+                expected: "list item",
+                actual: other.map_or("nothing", |frame| frame.name()),
                 span,
             }),
         }
@@ -502,13 +501,10 @@ impl AstBuilder {
             .is_none()
         {
             if !self.accepts_blocks() {
-                let actual = self
-                    .stack
-                    .last()
-                    .map_or("nothing", crate::markdown::state::Frame::name);
+                let actual = self.stack.last().map_or("nothing", Frame::name);
                 return Err(MarkdownError::InvalidNesting {
-                    expected: "inline container".to_owned(),
-                    actual: actual.to_owned(),
+                    expected: "inline container",
+                    actual,
                     span,
                 });
             }
@@ -543,8 +539,8 @@ impl AstBuilder {
                 Ok(())
             }
             None => Err(MarkdownError::InvalidNesting {
-                expected: "block container".to_owned(),
-                actual: name.to_owned(),
+                expected: "block container",
+                actual: name,
                 span: block.span,
             }),
         }
@@ -630,11 +626,7 @@ const fn convert_alignment(alignment: &pulldown_cmark::Alignment) -> Alignment {
 fn code_block_language(kind: &CodeBlockKind<'_>) -> Option<String> {
     match kind {
         CodeBlockKind::Indented => None,
-        CodeBlockKind::Fenced(info) => info
-            .split_whitespace()
-            .next()
-            .map(str::to_owned)
-            .filter(|language| !language.is_empty()),
+        CodeBlockKind::Fenced(info) => info.split_whitespace().next().map(str::to_owned),
     }
 }
 
@@ -928,7 +920,7 @@ mod tests {
         use crate::ast::validate::AstValidationError;
 
         let with_span = MarkdownError::UnsupportedConstruct {
-            construct: "x".to_owned(),
+            construct: "x",
             span: span(),
         };
         assert_eq!(with_span.span(), Some(span()));

@@ -104,12 +104,7 @@ fn too_large(size: u64) -> AppError {
 /// или содержит нулевой байт.
 pub fn decode_and_normalize(bytes: &[u8]) -> Result<String, AppError> {
     if bytes.len() > MAX_INPUT_BYTES {
-        return Err(AppError::InvalidInput {
-            message: format!(
-                "input is {} bytes, limit is {MAX_INPUT_BYTES} bytes",
-                bytes.len()
-            ),
-        });
+        return Err(too_large(bytes.len() as u64));
     }
 
     let without_bom = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
@@ -129,24 +124,12 @@ pub fn decode_and_normalize(bytes: &[u8]) -> Result<String, AppError> {
 
 /// CRLF и одиночный CR → LF.
 #[must_use]
-pub fn normalize_line_endings(text: &str) -> String {
+fn normalize_line_endings(text: &str) -> String {
     if !text.contains('\r') {
         return text.to_owned();
     }
 
-    let mut normalized = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\r' {
-            if chars.peek() == Some(&'\n') {
-                chars.next();
-            }
-            normalized.push('\n');
-        } else {
-            normalized.push(ch);
-        }
-    }
-    normalized
+    text.replace("\r\n", "\n").replace('\r', "\n")
 }
 
 #[cfg(test)]
@@ -202,7 +185,7 @@ mod tests {
             output: None,
             title: None,
             author: None,
-            paper: "a4".to_owned(),
+            paper: crate::typst_gen::generator::PaperSize::A4,
             margin: "20mm".to_owned(),
             font_size: "11pt".to_owned(),
             toc: false,

@@ -51,10 +51,12 @@ impl MdpdfWorld {
 
         // Байты переводятся в `Bytes` один раз: Typst обращается к файлу
         // многократно, а `Bytes` клонируется дёшево.
-        let mut files = HashMap::new();
-        for (logical_path, bytes) in resources.iter() {
-            files.insert(virtual_file_id(logical_path)?, Bytes::new(bytes.to_vec()));
-        }
+        let files = resources
+            .iter()
+            .map(|(logical_path, bytes)| {
+                Ok((virtual_file_id(logical_path)?, Bytes::new(bytes.to_vec())))
+            })
+            .collect::<Result<HashMap<_, _>, CompileError>>()?;
 
         Ok(Self {
             library: LazyHash::new(Library::default()),

@@ -129,14 +129,7 @@ fn check_spans_within_source(
     source_len: usize,
 ) -> Result<(), MarkdownError> {
     for block in blocks {
-        if block.span.end > source_len {
-            return Err(MarkdownError::InternalInvariant {
-                message: format!(
-                    "span {}..{} exceeds source length {source_len}",
-                    block.span.start, block.span.end
-                ),
-            });
-        }
+        check_span(block.span, source_len)?;
         match &block.value {
             Block::Heading(heading) => check_inline_spans(&heading.content, source_len)?,
             Block::Paragraph(paragraph) => check_inline_spans(&paragraph.content, source_len)?,
@@ -168,25 +161,11 @@ fn check_inline_spans(inlines: &[Inline], source_len: usize) -> Result<(), Markd
     for inline in inlines {
         match inline {
             Inline::Link(link) => {
-                if link.span.end > source_len {
-                    return Err(MarkdownError::InternalInvariant {
-                        message: format!(
-                            "span {}..{} exceeds source length {source_len}",
-                            link.span.start, link.span.end
-                        ),
-                    });
-                }
+                check_span(link.span, source_len)?;
                 check_inline_spans(&link.value.content, source_len)?;
             }
             Inline::Image(image) => {
-                if image.span.end > source_len {
-                    return Err(MarkdownError::InternalInvariant {
-                        message: format!(
-                            "span {}..{} exceeds source length {source_len}",
-                            image.span.start, image.span.end
-                        ),
-                    });
-                }
+                check_span(image.span, source_len)?;
                 check_inline_spans(&image.value.alt, source_len)?;
             }
             Inline::Emphasis(content)
@@ -194,6 +173,19 @@ fn check_inline_spans(inlines: &[Inline], source_len: usize) -> Result<(), Markd
             | Inline::Strikethrough(content) => check_inline_spans(content, source_len)?,
             Inline::Text(_) | Inline::Code(_) | Inline::SoftBreak | Inline::HardBreak => {}
         }
+    }
+    Ok(())
+}
+
+/// Один диапазон против длины источника (ТЗ §14).
+fn check_span(span: SourceSpan, source_len: usize) -> Result<(), MarkdownError> {
+    if span.end > source_len {
+        return Err(MarkdownError::InternalInvariant {
+            message: format!(
+                "span {}..{} exceeds source length {source_len}",
+                span.start, span.end
+            ),
+        });
     }
     Ok(())
 }

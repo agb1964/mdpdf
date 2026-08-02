@@ -310,7 +310,7 @@ fn inline_html_is_rejected() {
     let err = parse_err("текст <b>жирный</b>\n");
     assert!(matches!(
         err,
-        MarkdownError::UnsupportedConstruct { ref construct, .. } if construct == "inline HTML"
+        MarkdownError::UnsupportedConstruct { construct, .. } if construct == "inline HTML"
     ));
     assert!(err.span().is_some());
 }
@@ -320,7 +320,7 @@ fn html_block_is_rejected() {
     let err = parse_err("<div>\nблок\n</div>\n");
     assert!(matches!(
         err,
-        MarkdownError::UnsupportedConstruct { ref construct, .. } if construct == "HTML block"
+        MarkdownError::UnsupportedConstruct { construct, .. } if construct == "HTML block"
     ));
 }
 

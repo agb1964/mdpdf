@@ -111,13 +111,14 @@ pub fn embedded_fonts() -> Result<&'static EmbeddedFontSet, CompileError> {
 }
 
 fn parse_embedded_fonts() -> Result<EmbeddedFontSet, String> {
-    let mut fonts = Vec::with_capacity(EMBEDDED_FONTS.len());
-    for (index, data) in EMBEDDED_FONTS.iter().enumerate() {
-        let bytes = typst::foundations::Bytes::new(*data);
-        let font = Font::new(bytes, 0)
-            .ok_or_else(|| format!("embedded font #{index} could not be parsed"))?;
-        fonts.push(font);
-    }
+    let fonts = EMBEDDED_FONTS
+        .iter()
+        .enumerate()
+        .map(|(index, data)| {
+            let bytes = typst::foundations::Bytes::new(*data);
+            Font::new(bytes, 0).ok_or_else(|| format!("embedded font #{index} could not be parsed"))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     let book = FontBook::from_fonts(&fonts);
     Ok(EmbeddedFontSet {
         book: LazyHash::new(book),
@@ -151,9 +152,7 @@ pub fn uncovered_characters(text: &str) -> Result<Vec<(char, usize)>, CompileErr
     counts.retain(|character, _| !set.covers(*character));
 
     let mut uncovered: Vec<(char, usize)> = counts.into_iter().collect();
-    uncovered.sort_by(|(left_char, left_count), (right_char, right_count)| {
-        right_count.cmp(left_count).then(left_char.cmp(right_char))
-    });
+    uncovered.sort_by_key(|&(character, count)| (std::cmp::Reverse(count), character));
     Ok(uncovered)
 }
 

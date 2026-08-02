@@ -97,7 +97,7 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
             // а не прячутся за общим «PDF compilation failed».
             if let CompileError::Typst { diagnostics } = &error {
                 for diagnostic in diagnostics {
-                    eprintln!("{}", diagnostic.render());
+                    eprintln!("{diagnostic}");
                 }
             }
             // Если ошибку удалось привязать к месту в Markdown, показывается
@@ -117,7 +117,7 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
     // Предупреждения Typst не теряются и уходят в stderr; PDF всё равно
     // создаётся (ТЗ §38).
     for warning in &compiled.warnings {
-        eprintln!("{}", warning.render());
+        eprintln!("{warning}");
     }
 
     if config.verbose {
