@@ -6,6 +6,20 @@
 
 ## Unreleased
 
+## [0.3.2] — 2026-08-02
+
+### Changed
+
+- Диагностики компилятора и ошибки Markdown/AST приведены к более прямому и
+  единообразному отображению через `Display`.
+- README дополнен ссылками на CI, релизы, загрузки и лицензию.
+
+### Fixed
+
+- Fuzz target Mermaid больше не прерывает проверку штатной паникой renderer,
+  которую должен перехватывать контракт fallback; непойманные паники по-прежнему
+  остаются ошибками фаззинга.
+
 ## [0.3.1] — 2026-08-01
 
 ### Added
@@ -101,6 +115,7 @@
 - Unit, integration, fuzz и golden-тесты.
 - CI для Ubuntu, macOS и Windows и релизные архивы для пяти target.
 
-[Unreleased]: https://github.com/agb1964/mdpdf/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/agb1964/mdpdf/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/agb1964/mdpdf/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/agb1964/mdpdf/compare/v0.1.0...v0.3.1
 [0.1.0]: https://github.com/agb1964/mdpdf/releases/tag/v0.1.0
