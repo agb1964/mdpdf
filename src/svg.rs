@@ -24,7 +24,15 @@ pub fn looks_like_svg(bytes: &[u8]) -> bool {
     text.starts_with("<svg") || (text.starts_with("<?xml") && text.contains("<svg"))
 }
 
-/// Ищет в SVG ссылку на внешний ресурс через `href`/`xlink:href`.
+/// Ищет в SVG ссылку на внешний ресурс.
+///
+/// Проверяются два места: атрибут `href`/`xlink:href` и функциональная нотация
+/// `url(...)` — последняя доступна из `style="fill:url(http://...)"`, из
+/// `<style>@import url("https://...")</style>` и из презентационных атрибутов,
+/// куда `href`-проверка не заглядывает вовсе.
+///
+/// Не покрыто намеренно: значение атрибута без кавычек (`href=http://...`) —
+/// XML такого не допускает, и SVG-парсер отвергнет файл раньше нас.
 ///
 /// Полноценный XML-парсер здесь не нужен (задача прямо это исключает):
 /// достаточно построчного поиска атрибута и разбора значения в кавычках —
@@ -73,7 +81,29 @@ pub fn external_reference(bytes: &[u8]) -> Option<String> {
         search_from = value_start + value_end;
     }
 
-    None
+    url_reference(&lower)
+}
+
+/// Ищет запрещённую схему внутри `url(...)`.
+///
+/// Кавычки внутри скобок необязательны (`url(http://a)` и `url("http://a")`
+/// равноправны), поэтому значение обрезается по первой закрывающей скобке или
+/// кавычке. Локальные ссылки вида `url(#gradient)`, которыми полон вывод
+/// Mermaid, схеме не соответствуют и проходят.
+fn url_reference(lower: &str) -> Option<String> {
+    lower.match_indices("url(").find_map(|(index, matched)| {
+        let value = lower[index + matched.len()..]
+            .trim_start()
+            .trim_start_matches(['"', '\'']);
+        if !FORBIDDEN_SCHEMES
+            .iter()
+            .any(|scheme| value.starts_with(scheme))
+        {
+            return None;
+        }
+        let end = value.find([')', '"', '\'']).unwrap_or(value.len());
+        Some(value[..end].trim().to_owned())
+    })
 }
 
 /// Позиция первого непробельного байта начиная с `from`; конец среза, если
@@ -138,6 +168,29 @@ mod tests {
     fn svg_referencing_a_data_uri_is_rejected() {
         let value = external_reference(b"<svg><image href=\"data:image/png;base64,AAAA\"/></svg>");
         assert_eq!(value.as_deref(), Some("data:image/png;base64,aaaa"));
+    }
+
+    #[test]
+    fn a_style_attribute_with_a_network_url_is_rejected() {
+        let value =
+            external_reference(br#"<svg><rect style="fill:url(http://example.com/a.png)"/></svg>"#);
+        assert_eq!(value.as_deref(), Some("http://example.com/a.png"));
+    }
+
+    #[test]
+    fn a_style_block_with_an_import_is_rejected() {
+        let value = external_reference(
+            br#"<svg><style>@import url("https://example.com/x.css");</style></svg>"#,
+        );
+        assert_eq!(value.as_deref(), Some("https://example.com/x.css"));
+    }
+
+    #[test]
+    fn a_local_fragment_url_is_allowed() {
+        assert_eq!(
+            external_reference(b"<svg><rect fill=\"url(#gradient)\"/></svg>"),
+            None
+        );
     }
 
     #[test]

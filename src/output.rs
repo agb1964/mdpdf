@@ -7,6 +7,7 @@
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::error::AppError;
 
@@ -67,21 +68,38 @@ pub fn write_pdf_atomically(path: &Path, bytes: &[u8], overwrite: bool) -> Resul
     replace(&temporary, path).map_err(|error| {
         let _ = fs::remove_file(&temporary);
         cleanup(error, path)
-    })
+    })?;
+
+    // Само по себе `rename` durable не является: после сбоя питания каталог
+    // может не содержать новой записи, хотя данные файла уже на диске.
+    // Ошибка намеренно игнорируется — Windows не даёт открыть каталог как
+    // файл, а PDF на этот момент уже записан и переименован.
+    let _ = File::open(directory_of(path)).and_then(|directory| directory.sync_all());
+    Ok(())
+}
+
+/// Каталог, в котором лежит файл; `.` для голого имени.
+fn directory_of(path: &Path) -> PathBuf {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf)
 }
 
 /// Временный файл создаётся рядом с целевым: переименование обязано остаться
 /// в пределах одной файловой системы (ТЗ §6.4).
 fn temporary_path(path: &Path) -> PathBuf {
-    let directory = path
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
     let name = path
         .file_name()
         .map_or_else(|| "output".to_owned(), |name| name.to_string_lossy().into());
-    // Идентификатор процесса разводит параллельные запуски в один каталог.
-    directory.join(format!(".{name}.{}.tmp", std::process::id()))
+    // Идентификатор процесса разводит параллельные запуски в один каталог,
+    // счётчик — параллельные записи внутри одного процесса: PID у них общий,
+    // и без счётчика два потока делили бы один временный файл.
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    directory_of(path).join(format!(
+        ".{name}.{}.{}.tmp",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ))
 }
 
 fn write_all(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
@@ -278,6 +296,28 @@ mod tests {
 
         assert!(matches!(err, AppError::Output { .. }));
         assert!(!path.exists(), "reserved empty file remained");
+    }
+
+    #[test]
+    fn concurrent_overwriting_writers_both_succeed() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("out.pdf");
+
+        // С `--overwrite` побеждает последний, но проиграть не должен никто:
+        // общий на процесс временный файл раньше ронял одного из писателей.
+        let outcomes: Vec<bool> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..2)
+                .map(|_| scope.spawn(|| write_pdf_atomically(&path, PDF, true).is_ok()))
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap_or(false))
+                .collect()
+        });
+
+        assert!(outcomes.iter().all(|success| *success), "{outcomes:?}");
+        assert_eq!(fs::read(&path).expect("read back"), PDF);
+        assert!(leftovers(dir.path()).is_empty());
     }
 
     #[test]

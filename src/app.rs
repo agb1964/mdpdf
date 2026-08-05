@@ -4,6 +4,7 @@
 //! (диагностический вывод) → компиляция → атомарная запись PDF.
 
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use crate::ast::SourceSpan;
@@ -46,7 +47,7 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
     }
 
     if let Some(path) = &config.emit_ast {
-        write_ast(path, &ast)?;
+        write_ast(path, &ast, config.overwrite)?;
         if !config.quiet {
             println!("Created {}", path.display());
         }
@@ -71,7 +72,7 @@ pub fn run(args: Cli) -> Result<ExitStatus, AppError> {
     }
 
     if let Some(path) = &config.emit_typst {
-        write_text(path, &generated.source)?;
+        write_text(path, &generated.source, config.overwrite)?;
         if !config.quiet {
             println!("Created {}", path.display());
         }
@@ -234,18 +235,43 @@ fn markdown_error(error: MarkdownError, document: &SourceDocument) -> AppError {
 /// Записывает AST в JSON (ТЗ §5.6).
 ///
 /// Формат не является стабильным публичным интерфейсом первой версии.
-fn write_ast(path: &Path, document: &Document) -> Result<(), AppError> {
+fn write_ast(path: &Path, document: &Document, overwrite: bool) -> Result<(), AppError> {
     let json = serde_json::to_string_pretty(document).map_err(|error| AppError::Output {
         path: path.to_path_buf(),
         source: std::io::Error::other(error),
     })?;
-    write_text(path, &(json + "\n"))
+    write_text(path, &(json + "\n"), overwrite)
 }
 
 /// Записывает диагностический текстовый файл (ТЗ §5.5, §5.6).
-fn write_text(path: &Path, contents: &str) -> Result<(), AppError> {
-    fs::write(path, contents).map_err(|source| AppError::Output {
-        path: path.to_path_buf(),
-        source,
-    })
+///
+/// Защита от перезаписи та же, что у PDF (ТЗ §6.2): `--emit-*` принимает путь
+/// от пользователя, и молча затирать по нему чужой файл — та же потеря данных,
+/// что и по `--output`. Имя занимается атомарно, без окна между проверкой
+/// и записью.
+fn write_text(path: &Path, contents: &str, overwrite: bool) -> Result<(), AppError> {
+    let file = if overwrite {
+        fs::File::create(path)
+    } else {
+        fs::File::create_new(path)
+    };
+
+    let mut file = file.map_err(|source| {
+        if source.kind() == std::io::ErrorKind::AlreadyExists {
+            AppError::OutputExists {
+                path: path.to_path_buf(),
+            }
+        } else {
+            AppError::Output {
+                path: path.to_path_buf(),
+                source,
+            }
+        }
+    })?;
+
+    file.write_all(contents.as_bytes())
+        .map_err(|source| AppError::Output {
+            path: path.to_path_buf(),
+            source,
+        })
 }

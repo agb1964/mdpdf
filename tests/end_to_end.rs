@@ -235,6 +235,45 @@ fn emit_typst_writes_the_generated_source() {
 }
 
 #[test]
+fn emit_ast_keeps_an_existing_file_without_overwrite() {
+    let (_dir, input) = document("# Заголовок\n");
+    let ast = input.with_file_name("ast.json");
+    std::fs::write(&ast, "keep me\n").expect("seed AST output");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--emit-ast")
+        .arg(&ast)
+        .assert()
+        .code(8)
+        .stderr(contains("already exists"));
+
+    assert_eq!(
+        std::fs::read_to_string(&ast).expect("read existing AST output"),
+        "keep me\n"
+    );
+}
+
+#[test]
+fn emit_typst_replaces_an_existing_file_with_overwrite() {
+    let (_dir, input) = document("# Заголовок\n");
+    let typst = input.with_file_name("out.typ");
+    std::fs::write(&typst, "old\n").expect("seed Typst output");
+
+    mdpdf()
+        .arg(&input)
+        .arg("--emit-typst")
+        .arg(&typst)
+        .arg("--overwrite")
+        .assert()
+        .success();
+
+    let written = std::fs::read_to_string(&typst).expect("read replaced Typst output");
+    assert!(written.contains("#show: mdpdf-document.with("));
+    assert_ne!(written, "old\n");
+}
+
+#[test]
 fn emit_alongside_output_still_produces_a_pdf() {
     let (dir, input) = document("# Заголовок\n");
     let typst = dir.path().join("out.typ");
