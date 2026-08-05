@@ -225,10 +225,10 @@ API, `default-features = false`). Неподдерживаемый синтак�
 
 ## Статус
 
-Первый технический выпуск
-[`v0.1.0`](https://github.com/agb1964/mdpdf/releases/tag/v0.1.0) опубликован.
+Первый технический выпуск опубликован.
 GitHub CI подтверждён на Ubuntu, macOS и Windows; release workflow создаёт
 бинарники для пяти target. Версия **1.0** пока не объявлена.
+Текущая версия [`v0.3.3`](https://github.com/agb1964/mdpdf/releases/tag/v0.3.3) 
 
 ### Сопровождение
 
