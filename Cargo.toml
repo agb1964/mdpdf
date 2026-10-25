@@ -32,7 +32,7 @@ typst-pdf = "=0.15.1"
 
 [dev-dependencies]
 assert_cmd = "2"
-lopdf = "0.45"
+lopdf = "0.46"
 predicates = "3"
 proptest = "1"
 tempfile = "3"
